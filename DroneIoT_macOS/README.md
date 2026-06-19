@@ -144,6 +144,14 @@ Tóm tắt nhanh:
 
 ## PHẦN B: Chạy hệ thống mỗi ngày (Đúng thứ tự!)
 
+> [!TIP]
+> **Dọn dẹp tiến trình cũ trước khi chạy:**
+> Để tránh lỗi xung đột cổng kết nối (như port `5763` bị chiếm dụng bởi tiến trình `fusion.py` chạy ngầm từ phiên làm việc trước khiến dữ liệu GPS hoặc cảm biến bị báo `0`), bạn nên dọn dẹp hệ thống trước khi khởi động phiên làm việc mới bằng cách chạy:
+> ```bash
+> cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+> bash Phase5_Operations/stop_all.sh
+> ```
+
 > 🔴 **QUAN TRỌNG**: Thứ tự khởi động phải là:
 > **Docker → SITL → (chờ MAV>) → Fusion → QGroundControl**
 

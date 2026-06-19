@@ -78,6 +78,13 @@ REM Thay TOKEN_CUA_BAN bằng token từ bước 1
 
 ### Mỗi lần chạy
 
+> [!TIP]
+> **Dọn dẹp tiến trình cũ trước khi chạy:**
+> Để tránh lỗi xung đột cổng kết nối (như port `5763` hoặc `1883`/`9001` bị chiếm dụng bởi các tiến trình chạy ngầm cũ), bạn nên chạy lệnh dừng hệ thống trước khi khởi động:
+> ```batch
+> Phase5_Operations\stop_all.bat
+> ```
+
 ```batch
 Phase5_Operations\start_all.bat
 ```

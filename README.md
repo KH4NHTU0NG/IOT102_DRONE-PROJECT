@@ -188,6 +188,12 @@ Sau khi nạp code thành công, board vẫn đang ở chế độ chờ nạp (
 > Quy trình khởi chạy các thành phần phải thực hiện **đúng thứ tự**:  
 > **Docker Server $\rightarrow$ Board BW16 $\rightarrow$ SITL (Drone ảo) $\rightarrow$ Python Gateway (fusion.py) $\rightarrow$ Web Control & Grafana**
 
+> [!TIP]
+> **Dọn dẹp tiến trình cũ trước khi chạy:**
+> Để tránh lỗi xung đột cổng kết nối (ví dụ: cổng `5763` của MAVLink hoặc `1883`/`9001` của MQTT bị chiếm dụng bởi tiến trình chạy ngầm từ phiên làm việc trước), bạn nên chạy lệnh dừng hệ thống trước khi khởi động phiên làm việc mới:
+> - **macOS:** `bash Phase5_Operations/stop_all.sh`
+> - **Windows:** `Phase5_Operations\stop_all.bat`
+
 ---
 
 ### ⚡ KHỞI ĐỘNG HỆ THỐNG HÀNG NGÀY BẰNG 1 LỆNH DUY NHẤT (Khuyên dùng)
