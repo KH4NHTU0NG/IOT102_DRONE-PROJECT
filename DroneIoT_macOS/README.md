@@ -279,11 +279,16 @@ Sau khi tạo xong 6 panels → **Save dashboard** → đặt tên `Drone IoT Mo
 
 ---
 
-### B7. Test toàn hệ thống (không cần mạch BW16)
+### B7. Test toàn hệ thống với mạch BW16 thực tế
 
-> ✅ Có thể test được với chỉ SITL. GPS và Altitude sẽ có data thật. Sensor (nhiệt độ, CO2...) sẽ hiện `0` cho đến khi cắm mạch BW16.
+> ✅ Kịch bản này kiểm chứng toàn bộ luồng truyền dữ liệu từ cảm biến phần cứng qua MQTT, tích hợp với GPS của SITL và hiển thị trực quan.
 
-#### B7.1 Restart SITL với GPS fix (nếu đang chạy, Ctrl+C rồi chạy lại)
+#### B7.1 Chuẩn bị mạch cảm biến BW16
+1. Cắm cáp USB kết nối board BW16 (đã nạp firmware) vào máy tính hoặc nguồn điện ngoài.
+2. Đảm bảo board đã kết nối thành công vào WiFi và đèn LED xanh trên board sáng nhấp nháy báo hiệu trạng thái hoạt động tốt.
+3. Mở Serial Monitor trên Arduino IDE để quan sát log gửi gói tin sensors thành công.
+
+#### B7.2 Khởi động Drone ảo (SITL)
 ```bash
 # Tab Terminal SITL (Cmd+T để mở tab mới)
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
@@ -295,14 +300,15 @@ AP: EKF3 IMU0 origin set   ← GPS đã fix (khoảng 30-60 giây)
 MAV>                        ← Sẵn sàng hoàn toàn
 ```
 
-#### B7.2 Chạy fusion.py (Tab Terminal mới)
+#### B7.3 Khởi chạy Data Fusion Gateway
 ```bash
+# Tab Terminal mới
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 source Phase4_Fusion/drone_env/bin/activate
 python3 Phase4_Fusion/fusion.py
 ```
 
-✅ Kết quả thành công trông như sau:
+✅ Kết quả thành công trông như sau (các chỉ số nhiệt độ `T` và cảm biến `CO2` hiển thị giá trị thực tế đo từ mạch thay vì số 0):
 ```
 [TOKEN] ✅ Token hợp lệ (length=88)
 [INFLUX] ✅ Kết nối OK — version=2.0.9
@@ -310,22 +316,18 @@ python3 Phase4_Fusion/fusion.py
 [SITL] ✅ Kết nối thành công! System ID=0
 🚀 Bắt đầu Fusion Loop
 
-[FUSION] ✅ #0001  GPS: (-35.3632, 149.1652, 584.0m)  T=0°C  CO2=0
-[FUSION] ✅ #0002  GPS: (-35.3632, 149.1652, 584.0m)  T=0°C  CO2=0
+[FUSION] ✅ #0001  GPS: (-35.3632, 149.1652, 584.0m)  T=28.5°C  CO2=412
+[FUSION] ✅ #0002  GPS: (-35.3632, 149.1652, 584.0m)  T=28.4°C  CO2=415
 ```
 
-#### B7.3 Xem data trên Grafana
-1. Mở **http://localhost:3000 → Dashboards → Drone IoT Monitor**
-2. Đổi time range sang **"Last 5 minutes"** (góc trên giữa)
-3. Nhấn **Refresh** (hoặc bật Auto refresh 5s)
-4. Panel **Độ cao bay** và **Vĩ độ GPS** sẽ hiện **đường line thật** từ SITL ✅
-
-#### B7.4 Xử lý nếu SITL vẫn báo `Chờ GPS...`
-Chuyển sang tab SITL, tại dấu nhắc `MAV>` gõ:
-```
-mode guided
-```
-→ fusion.py sẽ nhận GPS ngay lập tức.
+#### B7.4 Kiểm tra trên Grafana và kiểm thử cảnh báo
+1. Mở **http://localhost:3000 $\rightarrow$ Dashboards $\rightarrow$ Drone IoT Monitor**.
+2. Đổi time range sang **"Last 5 minutes"**, bật Auto refresh **5s**.
+3. Các biểu đồ Nhiệt độ, Độ ẩm, CO2 sẽ vẽ các đường line dao động thực tế theo các giá trị gửi về từ cảm biến vật lý.
+4. **Kiểm tra tính năng cảnh báo (Alert test):**
+   - Thổi hơi nóng hoặc đưa khí gas (từ bật lửa) lại gần cảm biến MQ-135 để tăng trị số CO2.
+   - Khi CO2 vượt ngưỡng 600, còi buzzer trên mạch sẽ kêu Beep Beep ngắt quãng và đèn LED đỏ sáng.
+   - Trên Grafana và Web Control, mức độ cảnh báo sẽ chuyển sang **NGUY HIỂM** màu đỏ nổi bật.
 
 ---
 
