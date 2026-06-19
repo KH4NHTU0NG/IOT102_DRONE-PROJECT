@@ -108,12 +108,14 @@ graph TD
 3. **Tầng 3: Cloud / MQTT Broker / Database (Truyền tải & Lưu trữ)**
    - **MQTT Broker**: Eclipse Mosquitto (Docker) chịu trách nhiệm chuyển tiếp tin nhắn gọn nhẹ từ board BW16.
    - **Database**: InfluxDB 2.x (Docker) lưu trữ dữ liệu dung hợp dưới dạng Time-Series để tối ưu hóa việc truy vấn và vẽ biểu đồ.
-4. **Tầng 4: Dashboard / Mobile App / Ground Station (Giao diện người dùng)**
-   - **Ground Station**: QGroundControl kết nối với Drone SITL thông qua cổng UDP 14550 để lập kế hoạch bay và kiểm soát drone ảo.
-   - **Dashboard**: Grafana kết nối với InfluxDB 2.x qua Flux query để hiển thị biểu đồ kết hợp trực quan (Telemetry bay + Chỉ số môi trường).
+4. **Tầng 4: Dashboard / Web Control / Ground Station (Giao diện người dùng)**
+   - **Ground Station**: QGroundControl kết nối với Drone SITL qua cổng UDP 14550 để lập lộ trình bay.
+   - **Dashboard**: Grafana kết nối với InfluxDB 2.x để hiển thị trực quan dữ liệu.
+   - **Web Control Interface**: Giao diện điều khiển trình duyệt tối giản kết nối trực tiếp Mosquitto qua cổng WebSocket 9001, cho phép phát lệnh còi/LED tới BW16 và lệnh bay tới SITL.
 5. **Tầng 5: Actuator Control (Điều khiển chấp hành)**
-   - **Drone ảo**: SITL gửi lệnh điều khiển tới bộ ESC/Motor mô phỏng của drone để thay đổi trạng thái bay ảo.
-   - **Phần cứng thực**: Board BW16 được lập trình để nghe (subscribe) tín hiệu cảnh báo từ Gateway. Nếu chỉ số MQ-135 hoặc Nhiệt độ vượt ngưỡng an toàn, board sẽ kích hoạt đèn LED tích hợp hoặc còi Buzzer cảnh báo vật lý.
+   - **Drone ảo**: SITL nhận lệnh bay từ Web Control hoặc QGroundControl và điều khiển động cơ ảo cất cánh, hạ cánh.
+   - **Phần cứng thực**: Board BW16 nhận lệnh từ Web Control hoặc tự động kích hoạt còi/LED cảnh báo khi nồng độ CO2 vượt ngưỡng 600.
+   - **Bộ kiểm thử (Tests)**: Tích hợp sẵn 4 kịch bản kiểm thử tự động (Tính liên tục dữ liệu, Độ trễ, Khả năng chịu lỗi, Web Control) trong thư mục vận hành.
 
 ---
 
