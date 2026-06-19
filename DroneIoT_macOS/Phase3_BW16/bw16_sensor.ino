@@ -20,11 +20,12 @@ const int   mqtt_port   = 1883;
 // ── Pin definitions ───────────────────────────────────────
 #define DHT_PIN    PA_26   // Chân DATA của DHT22
 #define DHT_TYPE   DHT22
-#define MQ135_PIN  PB_1   // Chân AOUT của MQ-135 (ADC)
+#define MQ135_PIN  PB_1    // Chân AOUT của MQ-135 (ADC)
 
-// Định nghĩa chân còi và LED theo yêu cầu tài liệu
-#define BUZZER_PIN PA_0    // Còi Buzzer (Active High)
-#define LED_PIN    PA_12   // Đèn LED hiển thị cảnh báo
+// Định nghĩa chân còi và LED thực tế trên board (tránh chân PA_12 trùng TX Log Console)
+#define BUZZER_PIN    PA_15  // Còi Buzzer (Active High)
+#define LED_PIN       PA_30  // LED Đỏ (Cảnh báo / LED_ON)
+#define LED_GREEN_PIN PA_27  // LED Xanh (An toàn / LED_OFF)
 
 // Ngưỡng cảnh báo khí CO2 tự động (thang đo ADC 12-bit thô 0-4095)
 const int CO2_THRESHOLD = 600;
@@ -98,12 +99,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
         mqtt_led_override = true;
         mqtt_led_state    = true;
         digitalWrite(LED_PIN, HIGH);
-        Serial.println("[CONTROL] MQTT override: BẬT LED");
+        digitalWrite(LED_GREEN_PIN, LOW);
+        Serial.println("[CONTROL] MQTT override: BẬT LED ĐỎ (Cảnh báo)");
     } else if (command == "LED_OFF") {
         mqtt_led_override = true;
         mqtt_led_state    = false;
         digitalWrite(LED_PIN, LOW);
-        Serial.println("[CONTROL] MQTT override: TẮT LED");
+        digitalWrite(LED_GREEN_PIN, HIGH);
+        Serial.println("[CONTROL] MQTT override: BẬT LED XANH (An toàn)");
     } else if (command == "RESET") {
         mqtt_buzzer_override = false;
         mqtt_led_override    = false;
@@ -169,9 +172,11 @@ void setup() {
 
     // Cấu hình chân output cho LED và Buzzer
     pinMode(LED_PIN, OUTPUT);
+    pinMode(LED_GREEN_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
 
-    // Trạng thái ban đầu: Còi và LED tắt
+    // Trạng thái ban đầu: LED Xanh sáng, LED Đỏ tắt, Còi tắt
+    digitalWrite(LED_GREEN_PIN, HIGH);
     digitalWrite(LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
 
@@ -235,13 +240,21 @@ void loop() {
 
         // ── ĐIỀU KHIỂN ĐÈN LED (Ưu tiên MQTT > Tự động) ──
         if (mqtt_led_override) {
-            digitalWrite(LED_PIN, mqtt_led_state ? HIGH : LOW);
-        } else {
-            // Tự động bật LED nếu có cảnh báo tự động
-            if (is_alert) {
+            if (mqtt_led_state) {
                 digitalWrite(LED_PIN, HIGH);
+                digitalWrite(LED_GREEN_PIN, LOW);
             } else {
                 digitalWrite(LED_PIN, LOW);
+                digitalWrite(LED_GREEN_PIN, HIGH);
+            }
+        } else {
+            // Tự động bật LED đỏ nếu có cảnh báo tự động, ngược lại xanh
+            if (is_alert) {
+                digitalWrite(LED_PIN, HIGH);
+                digitalWrite(LED_GREEN_PIN, LOW);
+            } else {
+                digitalWrite(LED_PIN, LOW);
+                digitalWrite(LED_GREEN_PIN, HIGH);
             }
         }
 
