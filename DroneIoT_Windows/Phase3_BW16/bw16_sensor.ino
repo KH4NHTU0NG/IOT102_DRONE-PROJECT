@@ -14,7 +14,7 @@
 
 const char* ssid        = "TEN_WIFI";          // Tên WiFi của bạn
 const char* password    = "MAT_KHAU_WIFI";     // Mật khẩu WiFi
-const char* mqtt_server = "192.168.1.252";     // IP máy tính chạy Broker
+const char* mqtt_server = "192.168.1.120";     // IP máy tính chạy Broker
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
