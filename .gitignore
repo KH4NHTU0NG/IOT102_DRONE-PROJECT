@@ -24,3 +24,11 @@ fusion.pid
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# ArduPilot SITL / MAVLink logs & temp files
+*.tlog
+*.tlog.raw
+eeprom.bin
+mav.parm
+terrain/
+

@@ -39,7 +39,7 @@ DroneIoT_Windows/
 | Script khởi động | `.sh` (bash) | `.bat` / `.ps1` |
 | Docker Desktop | Apple Silicon build | WSL2 backend |
 | Lấy IP máy tính | `ipconfig getifaddr en0` | `ipconfig` (CMD) |
-| Kiểm tra port | `lsof -i :5760` | `netstat -an \| findstr 5760` |
+| Kiểm tra port | `lsof -i :5763` | `netstat -an \| findstr 5763` |
 
 ---
 
@@ -111,6 +111,86 @@ Phase5_Operations\start_all.bat
 |---------|-----|------|----------|
 | Grafana | http://localhost:3000 | admin | admin |
 | InfluxDB | http://localhost:8086 | admin | adminpassword |
+
+---
+
+## PHẦN D: Web Control & Kiểm thử tích hợp (GĐ 6 - GĐ 10)
+
+### D1. Giao diện Web Control (index.html)
+Trang Web Control giao tiếp trực tiếp với Mosquitto Broker qua giao thức MQTT over WebSockets trên cổng `9001` (không cần server backend).
+1. Khởi động Docker, SITL (trong WSL2) và `fusion.py` trên Windows.
+2. Mở file `Phase5_Operations\web_control\index.html` bằng trình duyệt (Chrome, Edge).
+3. Đảm bảo trạng thái badge ở góc trên bên phải báo **"Đã kết nối"** (màu xanh lá).
+4. Các nút điều khiển:
+   - **Bay (MAVLink SITL)**: Bấm `ARM`, `TAKEOFF 10m`, `LAND`, `RTL` để điều khiển trực tiếp drone ảo.
+   - **Cảnh báo (BW16)**: Bấm `BẬT CÒI` / `TẮT CÒI`, `BẬT LED` / `TẮT LED` và `Khôi Phục Tự Động Onboard`.
+
+### D2. Chạy các kịch bản kiểm thử tích hợp (Windows PowerShell/CMD)
+Kích hoạt môi trường venv trước khi chạy:
+```batch
+REM Mở CMD
+Phase4_Fusion\drone_env\Scripts\activate
+```
+
+Sau đó chạy từng test:
+1. **Kiểm tra tính liên tục dữ liệu**:
+   ```bash
+   python Phase5_Operations/tests/test_continuity.py
+   ```
+2. **Đo độ trễ đầu cuối (Latency)**:
+   ```bash
+   python Phase5_Operations/tests/test_latency.py
+   ```
+3. **Kiểm tra khả năng chịu lỗi (Fault Tolerance)**:
+   ```bash
+   python Phase5_Operations/tests/test_fault_tolerance.py
+   ```
+   *Kết quả sẽ ghi vào file `test_report.txt`*.
+4. **Kiểm tra Web Control**:
+   ```bash
+   python Phase5_Operations/tests/test_web_control.py
+   ```
+
+---
+
+## PHẦN E: Cấu hình Grafana Nâng cao (Bản đồ Geomap & Alert)
+
+### E1. Vẽ bản đồ quỹ đạo (Geomap Panel)
+1. Thêm Panel mới trong Grafana Dashboard.
+2. Chọn Visualization: **Geomap**.
+3. Dán câu truy vấn Flux sau:
+   ```flux
+   from(bucket: "drone_data")
+     |> range(start: -30m)
+     |> filter(fn: (r) => r._measurement == "drone_telemetry")
+     |> filter(fn: (r) => r._field == "latitude" or r._field == "longitude")
+     |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+   ```
+4. Tại phần cấu hình Map Layer (bên phải):
+   - **Location Mode**: `Coords`
+   - **Latitude field**: `latitude`
+   - **Longitude field**: `longitude`
+5. Nhấn **Apply**.
+
+### E2. Cấu hình Alert cảnh báo khí độc CO2 > 600
+1. Vào **Alerting → Alert rules → Create rule**.
+2. Đặt tên rule: `Drone CO2 Warning`.
+3. Nhập câu truy vấn Flux lấy CO2:
+   ```flux
+   from(bucket: "drone_data")
+     |> range(start: -1m)
+     |> filter(fn: (r) => r._measurement == "drone_telemetry")
+     |> filter(fn: (r) => r._field == "co2")
+     |> last()
+   ```
+4. Đặt điều kiện cảnh báo: chọn **Evaluate** -> nếu giá trị cuối cùng `last() > 600`.
+5. Đặt tần suất đánh giá (Evaluation interval): `10s`, thời gian chờ (Pending period): `30s`.
+
+---
+
+## PHẦN F: Tài liệu tham chiếu
+*   **Báo cáo kỹ thuật học thuật chi tiết**: Xem tại [academic_report.md](Phase5_Operations/academic_report.md)
+*   **Sơ đồ nối dây thực tế**: Xem tại [wiring_diagram.md](Phase3_BW16/wiring_diagram.md)
 
 ---
 

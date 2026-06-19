@@ -47,14 +47,14 @@ echo.
 echo   Cho SITL hien "MAV^>" roi nhan Enter...
 pause
 
-REM Kiem tra port 5760
-netstat -an | findstr ":5760" >NUL 2>&1
+REM Kiem tra port 5763
+netstat -an | findstr ":5763" >NUL 2>&1
 IF ERRORLEVEL 1 (
-    echo [WARN] Port 5760 chua mo - SITL co the chua san sang.
+    echo [WARN] Port 5763 chua mo - SITL co the chua san sang.
     echo        Doi them 30 giay...
     timeout /t 30 /nobreak >NUL
 ) ELSE (
-    echo [OK] Port 5760 dang mo.
+    echo [OK] Port 5763 dang mo.
 )
 
 REM Buoc 4: Fusion Gateway

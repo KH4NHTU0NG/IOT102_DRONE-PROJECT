@@ -3,17 +3,9 @@ fusion.py — Phase 4: Data Fusion Gateway
 Platform: macOS Apple Silicon
 
 Chức năng:
-  - Nhận GPS ảo từ ArduPilot SITL qua TCP 5760 (MAVLink)
-  - Nhận dữ liệu cảm biến thật từ BW16 qua MQTT
-  - Gộp theo timestamp và ghi vào InfluxDB
-  - Grafana đọc InfluxDB để hiển thị realtime
-
-Bug fixes:
-  #1  : on_connect dùng CallbackAPIVersion.VERSION2 (5-arg) — fix DeprecationWarning
-  #2  : MAVLink có timeout + retry loop — không crash khi mất kết nối SITL
-  #3  : Kiểm tra TOKEN hợp lệ trước khi kết nối InfluxDB
-  #11 : Reconnect MAVLink tự động khi SITL bị disconnect giữa chừng
-  #12 : Assertion TOKEN + error message rõ ràng
+  - Chạy luồng MQTT: Nhận sensor data từ BW16 và lệnh bay từ Web Control
+  - Chạy luồng MAVLink: Nhận GPS từ SITL và gửi lệnh điều khiển bay
+  - Luồng chính: Đồng bộ dữ liệu mỗi 1 giây và ghi vào InfluxDB
 """
 
 from pymavlink import mavutil
@@ -27,285 +19,267 @@ import sys
 import os
 
 # ══════════════════════════════════════════════════════════
-# CẤU HÌNH — Chỉnh sửa phần này
+# CẤU HÌNH
 # ══════════════════════════════════════════════════════════
-
 INFLUX_URL    = "http://localhost:8086"
-INFLUX_TOKEN  = "TOKEN_CUA_BAN"       # ← Paste token từ setup.sh hoặc .influx_token
+INFLUX_TOKEN  = "SPSuc2iYUViMysgXOlYD61aYXaiarb7hBPfpHZBAWCknUphbdH4Vqa_C7VLEAp6622vkOXtg1W_yVx5TYG1h9A=="  # Sẽ được ghi đè bằng file .influx_token nếu có
 INFLUX_ORG    = "drone_org"
 INFLUX_BUCKET = "drone_data"
 
 MQTT_BROKER   = "127.0.0.1"
 MQTT_PORT     = 1883
-MQTT_TOPIC    = "drone/payload/sensors"
 
 SITL_HOST     = "127.0.0.1"
-SITL_PORT     = 5763
+SITL_PORT     = 5763  # Cổng MAVProxy chuyển tiếp ra TCP
 
 # ══════════════════════════════════════════════════════════
-# Bug fix #3 & #12: Validate TOKEN trước khi bắt đầu
+# Khởi tạo Shared State
+# ══════════════════════════════════════════════════════════
+gps_data = {}
+sensor_data = {}
+state_lock = threading.Lock()
+sensor_received = threading.Event()
+
+master = None  # Global MAVLink connection
+
+# ══════════════════════════════════════════════════════════
+# Bug fix #3: Tải token động từ file .influx_token
 # ══════════════════════════════════════════════════════════
 def load_token() -> str:
-    """Đọc token từ biến hoặc file .influx_token nếu chưa set."""
     token = INFLUX_TOKEN
-
-    # Thử đọc từ file .influx_token (tự động tạo bởi setup.sh)
     token_file = os.path.join(os.path.dirname(__file__), ".influx_token")
-    if token == "TOKEN_CUA_BAN" and os.path.exists(token_file):
+    if os.path.exists(token_file):
         with open(token_file) as f:
             token = f.read().strip()
         print(f"[TOKEN] Đọc từ file: {token_file}")
-
-    # Thử đọc từ environment variable
-    if token == "TOKEN_CUA_BAN":
-        token = os.environ.get("INFLUX_TOKEN", "TOKEN_CUA_BAN")
-
-    if token == "TOKEN_CUA_BAN" or not token:
-        print("=" * 60)
-        print("❌ INFLUX_TOKEN chưa được set!")
-        print("")
-        print("  Cách lấy token:")
-        print("  docker exec iot_db influx auth list \\")
-        print("    --user admin --hide-headers | awk '{print $4}'")
-        print("")
-        print("  Sau đó:")
-        print("  1. Dán token vào biến INFLUX_TOKEN trong fusion.py")
-        print("  2. HOẶC export INFLUX_TOKEN='your_token' trước khi chạy")
-        print("=" * 60)
+    
+    if not token or token == "TOKEN_CUA_BAN":
+        token = os.environ.get("INFLUX_TOKEN", "")
+        
+    if not token:
+        print("[ERROR] INFLUX_TOKEN chưa được cấu hình!")
         sys.exit(1)
-
     return token
 
-
 # ══════════════════════════════════════════════════════════
-# Thread-safe sensor data store
-# ══════════════════════════════════════════════════════════
-sensor_data: dict = {}
-sensor_lock = threading.Lock()
-sensor_received = threading.Event()  # Signal khi nhận được data đầu tiên
-
-
-# ══════════════════════════════════════════════════════════
-# MQTT Callbacks — Bug fix #1: dùng CallbackAPIVersion.VERSION2
+# MQTT Callbacks & Thread
 # ══════════════════════════════════════════════════════════
 def on_connect(client, userdata, flags, reason_code, properties):
-    """Callback khi kết nối MQTT thành công/thất bại."""
     if reason_code == 0:
         print(f"[MQTT] ✅ Kết nối thành công broker {MQTT_BROKER}:{MQTT_PORT}")
-        client.subscribe(MQTT_TOPIC)
-        print(f"[MQTT] Đang lắng nghe topic: {MQTT_TOPIC}")
+        client.subscribe("drone/payload/sensors")
+        client.subscribe("drone/control/flight")
+        print("[MQTT] Đã subscribe: drone/payload/sensors & drone/control/flight")
     else:
         print(f"[MQTT] ❌ Kết nối thất bại, code={reason_code}")
-        print("       Kiểm tra Docker container iot_mqtt đang chạy.")
-
 
 def on_message(client, userdata, msg):
-    """Callback khi nhận được message từ BW16."""
-    global sensor_data
+    global sensor_data, master
+    topic = msg.topic
     try:
-        data = json.loads(msg.payload.decode("utf-8"))
-        with sensor_lock:
-            sensor_data = data
-        sensor_received.set()  # Báo hiệu đã nhận data đầu tiên
-        print(f"[MQTT] 📡 Cảm biến: temp={data.get('temp')}°C  "
-              f"humidity={data.get('humidity')}%  "
-              f"co2={data.get('co2')}  "
-              f"rssi={data.get('rssi', 'N/A')}dBm")
-    except json.JSONDecodeError as e:
-        print(f"[MQTT] ⚠️  JSON parse error: {e} — payload: {msg.payload}")
+        payload_str = msg.payload.decode("utf-8")
+        if topic == "drone/payload/sensors":
+            data = json.loads(payload_str)
+            with state_lock:
+                sensor_data = data
+            sensor_received.set()
+        elif topic == "drone/control/flight":
+            data = json.loads(payload_str)
+            command = data.get("command")
+            alt = data.get("alt", 10.0)
+            print(f"[CMD] Nhận lệnh bay: {command} (alt={alt}m)")
+            
+            if master is None:
+                print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua lệnh.")
+                return
+                
+            if command == "ARM":
+                # Gửi lệnh ARM
+                master.mav.command_long_send(
+                    master.target_system, master.target_component,
+                    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
+                    1, 0, 0, 0, 0, 0, 0
+                )
+                print("[MAVLINK] Sent ARM command")
+            elif command == "TAKEOFF":
+                # Đổi mode sang GUIDED, ARM và TAKEOFF
+                master.set_mode('GUIDED')
+                time.sleep(0.2)
+                master.mav.command_long_send(
+                    master.target_system, master.target_component,
+                    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
+                    1, 0, 0, 0, 0, 0, 0
+                )
+                time.sleep(0.2)
+                master.mav.command_long_send(
+                    master.target_system, master.target_component,
+                    mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0,
+                    0, 0, 0, 0, 0, 0, float(alt)
+                )
+                print(f"[MAVLINK] Sent TAKEOFF command (alt={alt}m)")
+            elif command == "LAND":
+                master.set_mode('LAND')
+                master.mav.command_long_send(
+                    master.target_system, master.target_component,
+                    mavutil.mavlink.MAV_CMD_NAV_LAND, 0,
+                    0, 0, 0, 0, 0, 0, 0
+                )
+                print("[MAVLINK] Sent LAND command")
+            elif command == "RTL":
+                master.set_mode('RTL')
+                master.mav.command_long_send(
+                    master.target_system, master.target_component,
+                    mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0,
+                    0, 0, 0, 0, 0, 0, 0
+                )
+                print("[MAVLINK] Sent RTL command")
     except Exception as e:
-        print(f"[MQTT] ❌ Lỗi: {e}")
-
+        print(f"[MQTT] Lỗi xử lý tin nhắn: {e}")
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
-    """Callback khi mất kết nối MQTT — paho tự reconnect."""
     if reason_code != 0:
-        print(f"[MQTT] ⚠️  Mất kết nối (code={reason_code}). Đang reconnect...")
-
+        print(f"[MQTT] Mất kết nối broker, code={reason_code}. Đang tự kết nối lại...")
 
 def start_mqtt() -> mqtt.Client:
-    """Khởi tạo và kết nối MQTT client."""
-    # Bug fix #1: dùng CallbackAPIVersion.VERSION2
     mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     mqtt_client.on_connect    = on_connect
     mqtt_client.on_message    = on_message
     mqtt_client.on_disconnect = on_disconnect
-
-    # Tự động reconnect
     mqtt_client.reconnect_delay_set(min_delay=1, max_delay=30)
-
     try:
         mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
     except ConnectionRefusedError:
-        print(f"[MQTT] ❌ Không thể kết nối {MQTT_BROKER}:{MQTT_PORT}")
-        print("       Chạy: docker-compose up -d để khởi động broker")
+        print(f"[MQTT] Không kết nối được tới {MQTT_BROKER}:{MQTT_PORT}")
         sys.exit(1)
-
-    # Chạy loop trong thread riêng (non-blocking)
+    
     threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
     return mqtt_client
 
-
 # ══════════════════════════════════════════════════════════
-# MAVLink connection — Bug fix #2 & #11: reconnect tự động
+# MAVLink Thread
 # ══════════════════════════════════════════════════════════
 def connect_sitl(max_retries: int = 5) -> mavutil.mavfile:
-    """Kết nối đến SITL qua TCP, tự động retry nếu thất bại."""
     connection_str = f"tcp:{SITL_HOST}:{SITL_PORT}"
-
     for attempt in range(1, max_retries + 1):
         try:
             print(f"[SITL] Đang kết nối {connection_str} (lần {attempt}/{max_retries})...")
-            master = mavutil.mavlink_connection(connection_str)
-            master.wait_heartbeat(timeout=10)
-            print(f"[SITL] ✅ Kết nối thành công! System ID={master.target_system}")
-            return master
+            conn = mavutil.mavlink_connection(connection_str)
+            conn.wait_heartbeat(timeout=10)
+            print(f"[SITL] ✅ Kết nối thành công! System ID={conn.target_system}")
+            return conn
         except Exception as e:
-            print(f"[SITL] ❌ Lần {attempt} thất bại: {e}")
+            print(f"[SITL] Lần {attempt} thất bại: {e}")
             if attempt < max_retries:
-                wait = min(2 ** attempt, 30)  # Exponential backoff
+                wait = min(2 ** attempt, 30)
                 print(f"[SITL] Thử lại sau {wait}s...")
                 time.sleep(wait)
-            else:
-                print("[SITL] ❌ Không thể kết nối SITL sau tất cả lần thử.")
-                print(f"       Kiểm tra SITL đang chạy và port {SITL_PORT} mở:")
-                print(f"       lsof -i :{SITL_PORT}")
-                sys.exit(1)
+    raise ConnectionError("Không kết nối được SITL")
 
+def mavlink_loop():
+    global master, gps_data
+    while True:
+        if master is None:
+            try:
+                master = connect_sitl(max_retries=1)
+            except Exception:
+                time.sleep(5)
+                continue
+        try:
+            msg = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1.0)
+            if msg is not None:
+                with state_lock:
+                    gps_data = {
+                        "lat": msg.lat / 1e7,
+                        "lon": msg.lon / 1e7,
+                        "alt": msg.alt / 1000.0
+                    }
+        except Exception as e:
+            print(f"[MAVLINK] Lỗi đọc gói tin: {e}. Đang reconnect...")
+            master = None
+            time.sleep(2)
 
 # ══════════════════════════════════════════════════════════
-# Main Fusion Loop
+# Main Program
 # ══════════════════════════════════════════════════════════
 def main():
+    global master
     print("=" * 60)
     print("  Drone IoT — fusion.py")
     print("  Platform: macOS Apple Silicon")
     print("=" * 60)
 
-    # Load & validate token
     token = load_token()
-    print(f"[TOKEN] ✅ Token hợp lệ (length={len(token)})")
-
-    # Kết nối InfluxDB
-    print(f"\n[INFLUX] Kết nối {INFLUX_URL}...")
-    influx    = InfluxDBClient(url=INFLUX_URL, token=token, org=INFLUX_ORG)
+    print("[INFLUX] Khởi tạo Client...")
+    influx = InfluxDBClient(url=INFLUX_URL, token=token, org=INFLUX_ORG)
     write_api = influx.write_api(write_options=SYNCHRONOUS)
 
-    # Verify InfluxDB connection
-    try:
-        health = influx.health()
-        if health.status != "pass":
-            print(f"[INFLUX] ❌ InfluxDB không healthy: {health.message}")
-            sys.exit(1)
-        print(f"[INFLUX] ✅ Kết nối OK — version={health.version}")
-    except Exception as e:
-        print(f"[INFLUX] ❌ Không kết nối được: {e}")
-        print("         Kiểm tra: docker ps | grep iot_db")
-        sys.exit(1)
-
-    # Kết nối MQTT
-    print("\n[MQTT] Khởi động...")
+    # Khởi động MQTT
     start_mqtt()
 
-    # Chờ nhận data đầu tiên từ BW16 (timeout 30s)
-    print("\n[MQTT] Chờ dữ liệu từ BW16...")
-    print("       (Nếu không có BW16, chạy test: docker exec iot_mqtt mosquitto_pub "
-          f"-t {MQTT_TOPIC} -m '{{\"temp\":28.5,\"humidity\":65,\"co2\":412}}')")
-    received = sensor_received.wait(timeout=30)
-    if not received:
-        print("[MQTT] ⚠️  Chưa nhận data sau 30s — tiếp tục nhưng sẽ skip frame cho đến khi có data")
+    # Khởi động kết nối SITL lần đầu
+    try:
+        master = connect_sitl()
+    except Exception:
+        print("[SITL] ⚠️  Khởi động không có kết nối SITL. Sẽ thử lại trong background thread.")
 
-    # Kết nối SITL
-    print("\n[SITL] Khởi động...")
-    master = connect_sitl()
+    # Khởi động luồng MAVLink background
+    threading.Thread(target=mavlink_loop, daemon=True).start()
 
-    # ── Fusion Loop ─────────────────────────────────────────
     print("\n" + "=" * 60)
     print("  🚀 Bắt đầu Fusion Loop — Ctrl+C để dừng")
     print("=" * 60 + "\n")
 
     frames_written = 0
-    frames_skipped = 0
-    reconnect_attempts = 0
 
     while True:
         try:
-            # Nhận GPS từ SITL
-            msg = master.recv_match(
-                type='GLOBAL_POSITION_INT',
-                blocking=True,
-                timeout=5
-            )
+            time.sleep(1.0)
 
-            if msg is None:
-                print("[SITL] ⏳ Chờ GPS... (SITL có thể chưa sẵn sàng hoàn toàn)")
-                time.sleep(1)
-                continue
+            # Lấy snapshot thread-safe
+            with state_lock:
+                gps = dict(gps_data)
+                sensor = dict(sensor_data)
 
-            # Reset reconnect counter khi nhận được data
-            reconnect_attempts = 0
+            # Xử lý Graceful fallbacks
+            lat = gps.get("lat", 0.0)
+            lon = gps.get("lon", 0.0)
+            alt = gps.get("alt", 0.0)
 
-            # Lấy snapshot sensor data (thread-safe)
-            with sensor_lock:
-                snap = dict(sensor_data)
-
-            if not snap:
-                frames_skipped += 1
-                if frames_skipped % 10 == 1:
-                    print(f"[FUSION] ⏳ BW16 chưa gửi data (skip={frames_skipped}) — ghi GPS với sensor=0")
-                # Không skip — vẫn ghi GPS data với sensor mặc định = 0
-                snap = {"temp": 0.0, "humidity": 0.0, "co2": 0, "rssi": 0}
-
-            # Build InfluxDB Point
-            lat = msg.lat / 1e7
-            lon = msg.lon / 1e7
-            alt = msg.alt / 1000.0
+            temp = sensor.get("temp", 0.0)
+            hum = sensor.get("humidity", 0.0)
+            co2 = sensor.get("co2", 0)
+            alert = sensor.get("alert", 0)
+            rssi = sensor.get("rssi", 0)
 
             point = (
                 Point("drone_telemetry")
-                .field("latitude",    lat)
-                .field("longitude",   lon)
-                .field("altitude",    alt)
-                .field("temperature", snap.get("temp", 0.0))
-                .field("humidity",    snap.get("humidity", 0.0))
-                .field("co2",         float(snap.get("co2", 0)))
-                .field("wifi_rssi",   float(snap.get("rssi", 0)))
+                .field("latitude",    float(lat))
+                .field("longitude",   float(lon))
+                .field("altitude",    float(alt))
+                .field("temperature", float(temp))
+                .field("humidity",    float(hum))
+                .field("co2",         float(co2))
+                .field("alert",       float(alert))
+                .field("wifi_rssi",   float(rssi))
             )
 
-            # Ghi vào InfluxDB
-            write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
-            frames_written += 1
-
-            print(f"[FUSION] ✅ #{frames_written:04d}  "
-                  f"GPS: ({lat:.4f}, {lon:.4f}, {alt:.1f}m)  "
-                  f"T={snap.get('temp', 0)}°C  "
-                  f"CO2={snap.get('co2', 0)}")
+            try:
+                write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
+                frames_written += 1
+                print(f"[FUSION] ✅ #{frames_written:04d} "
+                      f"GPS: ({lat:.5f}, {lon:.5f}, {alt:.1f}m) "
+                      f"T={temp}°C, H={hum}%, CO2={co2}, Alert={alert}")
+            except Exception as db_err:
+                print(f"[INFLUX] ❌ Ghi DB thất bại: {db_err}")
 
         except KeyboardInterrupt:
             print("\n\n[FUSION] Đã dừng bởi người dùng (Ctrl+C)")
-            print(f"         Tổng frames ghi: {frames_written}")
-            print(f"         Tổng frames skip: {frames_skipped}")
             break
-
-        # Bug fix #11: Reconnect MAVLink khi mất kết nối giữa chừng
-        except ConnectionResetError:
-            reconnect_attempts += 1
-            print(f"\n[SITL] ❌ Mất kết nối MAVLink (lần {reconnect_attempts}). Đang reconnect...")
-            time.sleep(3)
-            try:
-                master = connect_sitl(max_retries=3)
-            except SystemExit:
-                print("[SITL] Không thể reconnect. Kiểm tra SITL còn chạy không.")
-                break
-
         except Exception as e:
-            print(f"[LOOP] ❌ Lỗi không xác định: {type(e).__name__}: {e}")
-            time.sleep(1)
+            print(f"[LOOP] Lỗi: {e}")
 
-    # Cleanup
     influx.close()
     print("[CLEANUP] Đã đóng kết nối InfluxDB.")
-
 
 if __name__ == "__main__":
     main()

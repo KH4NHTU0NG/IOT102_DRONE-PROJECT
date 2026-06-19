@@ -33,7 +33,7 @@ if (-not $hostIP) {
 Write-Host ""
 Write-Host "[*] Windows Host IP: $hostIP" -ForegroundColor Yellow
 Write-Host "[*] QGroundControl (Windows) se connect UDP :14550" -ForegroundColor Yellow
-Write-Host "[*] fusion.py (Windows) se connect TCP :5760" -ForegroundColor Yellow
+Write-Host "[*] fusion.py (Windows) se connect TCP :5763" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Cho cac dong sau xuat hien truoc khi dung:" -ForegroundColor Cyan
 Write-Host "  AP: ArduPilot Ready" -ForegroundColor Green
@@ -57,6 +57,7 @@ fi
 
 # Giai phong port neu bi chiem
 fuser -k 5760/tcp 2>/dev/null || true
+fuser -k 5763/tcp 2>/dev/null || true
 fuser -k 14550/udp 2>/dev/null || true
 sleep 1
 
@@ -65,7 +66,8 @@ sleep 1
 python3 ~/ardupilot/Tools/autotest/sim_vehicle.py \
     -v ArduCopter \
     --out=udp:0.0.0.0:14550 \
-    --out=tcp:0.0.0.0:5760 \
+    --out=tcpin:0.0.0.0:5763 \
+    --custom-location=-35.363261,149.165230,584,0 \
     --speedup 1 \
     --slave 0 \
     --sim-address=127.0.0.1 \

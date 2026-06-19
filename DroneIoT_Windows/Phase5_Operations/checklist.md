@@ -31,7 +31,7 @@ docker exec -it iot_mqtt mosquitto_pub -t "drone/payload/sensors" -m "{\"temp\":
 
 ### Port SITL (WSL2)
 ```cmd
-netstat -an | findstr "5760"
+netstat -an | findstr "5763"
 netstat -an | findstr "14550"
 ```
 
@@ -47,7 +47,7 @@ REM Copy cot thu 4 (token)
 
 | Triệu chứng | Fix |
 |-------------|-----|
-| SITL không connect qua TCP 5760 | WSL2 bind phải dùng `0.0.0.0` (run_sitl.ps1 đã xử lý) |
+| SITL không connect qua TCP 5763 | WSL2 bind phải dùng `0.0.0.0` (run_sitl.ps1 đã xử lý) |
 | fusion.py lỗi connect SITL | Kiểm tra WSL2 đang chạy: `wsl --status` |
 | Docker không start | Bật WSL2 backend trong Docker Desktop Settings |
 | PowerShell "execution policy" | Chạy: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |

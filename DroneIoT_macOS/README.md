@@ -375,12 +375,97 @@ Hoặc thủ công:
 
 ---
 
+## PHẦN D: Web Control & Kiểm thử tích hợp (GĐ 6 - GĐ 10)
+
+### D1. Giao diện Web Control (index.html)
+Trang Web Control giao tiếp trực tiếp với Mosquitto Broker qua giao thức MQTT over WebSockets trên cổng `9001` (không cần server backend).
+1. Khởi động Docker, SITL và `fusion.py`.
+2. Mở file `Phase5_Operations/web_control/index.html` trong trình duyệt (Chrome, Safari, Firefox).
+3. Đảm bảo trạng thái badge ở góc trên bên phải báo **"Đã kết nối"** (màu xanh lá).
+4. Các chức năng trên giao diện:
+   - **Bay (MAVLink SITL)**: Bấm `ARM` để khởi động động cơ, `TAKEOFF 10m` để cất cánh, `LAND` để hạ cánh, `RTL` để quay về điểm xuất phát.
+   - **Cảnh báo (BW16)**: Bấm `BẬT CÒI` / `TẮT CÒI` để điều khiển trực tiếp còi báo động trên board BW16. Bấm `Khôi Phục Tự Động Onboard` để trả quyền điều khiển về logic tự động của cảm biến.
+   - **Dữ liệu live & Log**: Hiển thị live Nhiệt độ, Độ ẩm, CO2 từ BW16 và RSSI. Hộp log lưu trữ lịch sử 20 lệnh gần nhất.
+
+### D2. Chạy các kịch bản kiểm thử tích hợp (Integration Tests)
+Hệ thống đi kèm với 4 kịch bản kiểm thử tự động viết bằng Python nằm trong thư mục `Phase5_Operations/tests/`:
+
+Để chạy kiểm thử, đảm bảo đã kích hoạt môi trường ảo Python:
+```bash
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+source Phase4_Fusion/drone_env/bin/activate
+```
+
+Sau đó chạy từng test:
+1. **Kiểm tra tính liên tục dữ liệu**:
+   ```bash
+   python3 Phase5_Operations/tests/test_continuity.py
+   ```
+   *Mô tả*: Truy vấn InfluxDB trong 5 phút qua và kiểm tra khoảng cách thời gian giữa các điểm dữ liệu liên tiếp. Pass nếu số gap > 3s chiếm < 5%.
+2. **Đo độ trễ đầu cuối (Latency)**:
+   ```bash
+   python3 Phase5_Operations/tests/test_latency.py
+   ```
+   *Mô tả*: Đo thời gian thực từ lúc nhận dữ liệu cảm biến qua MQTT đến khi dữ liệu được ghi thành công vào InfluxDB (lấy mẫu 20 lần). Pass nếu độ trễ tối đa < 2 giây.
+3. **Kiểm tra khả năng chịu lỗi (Fault Tolerance)**:
+   ```bash
+   python3 Phase5_Operations/tests/test_fault_tolerance.py
+   ```
+   *Mô tả*: Mô phỏng kiểm tra trạng thái mất kết nối SITL, stress test MQTT (100 msgs/s) và khôi phục DB. Kết quả ghi vào file `test_report.txt`.
+4. **Kiểm tra Web Control**:
+   ```bash
+   python3 Phase5_Operations/tests/test_web_control.py
+   ```
+   *Mô tả*: Thực hiện gửi nhận tin nhắn lệnh bay/còi giả lập trên MQTT và hiển thị hướng dẫn xác nhận thủ công.
+
+---
+
+## PHẦN E: Cấu hình Grafana Nâng cao (Bản đồ Geomap & Alert)
+
+### E1. Vẽ bản đồ quỹ đạo (Geomap Panel)
+1. Thêm Panel mới trong Grafana Dashboard.
+2. Chọn Visualization: **Geomap** (hoặc cài đặt plugin `TrackMap` từ Grafana Store).
+3. Dán câu truy vấn Flux sau để gộp tọa độ lat/lon theo cùng timestamp:
+   ```flux
+   from(bucket: "drone_data")
+     |> range(start: -30m)
+     |> filter(fn: (r) => r._measurement == "drone_telemetry")
+     |> filter(fn: (r) => r._field == "latitude" or r._field == "longitude")
+     |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+   ```
+4. Tại phần cấu hình Map Layer (bên phải):
+   - **Location Mode**: chọn `Coords`
+   - **Latitude field**: chọn `latitude`
+   - **Longitude field**: chọn `longitude`
+5. Nhấn **Apply** → Bản đồ sẽ vẽ trace di chuyển thực tế của drone.
+
+### E2. Cấu hình Alert cảnh báo khí độc CO2
+1. Vào **Alerting → Alert rules → Create rule**.
+2. Đặt tên rule: `Drone CO2 Warning`.
+3. Nhập câu truy vấn Flux lấy CO2:
+   ```flux
+   from(bucket: "drone_data")
+     |> range(start: -1m)
+     |> filter(fn: (r) => r._measurement == "drone_telemetry")
+     |> filter(fn: (r) => r._field == "co2")
+     |> last()
+   ```
+4. Đặt điều kiện cảnh báo: **Define query and alert condition** -> chọn **Evaluate** -> nếu giá trị cuối cùng `last() > 600`.
+5. Đặt tần suất đánh giá (Evaluation interval): `10s`, thời gian chờ kích hoạt (Pending period): `30s`.
+6. Tại mục **Contact points**: Cấu hình ghi cảnh báo ra log Grafana hoặc các kênh Email/Slack mong muốn.
+
+---
+
+## PHẦN F: Tài liệu tham chiếu
+*   **Báo cáo kỹ thuật học thuật chi tiết**: Xem tại [academic_report.md](Phase5_Operations/academic_report.md)
+*   **Sơ đồ nối dây thực tế**: Xem tại [wiring_diagram.md](Phase3_BW16/wiring_diagram.md)
+
+---
+
 ## Yêu cầu phần cứng
 
 - Mac chip M1/M2/M3/M4 (Apple Silicon), RAM ≥ 8GB
 - Docker Desktop for Mac (Apple Silicon build)
-- Board BW16 (RTL8720DN) + cáp USB **có dây data**
+- Board BW16 (RTL8720DN) + cáp USB có dây data
 - Cảm biến DHT22 + điện trở pull-up 10kΩ
-- Cảm biến MQ-135 + **2 điện trở 10kΩ** (voltage divider bắt buộc)
-
-
+- Cảm biến MQ-135 + còi cắm qua Transistor NPN 2N2222
