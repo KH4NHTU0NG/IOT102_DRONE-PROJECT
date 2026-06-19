@@ -64,6 +64,7 @@ python3 "$SITL_BIN" \
     -v ArduCopter \
     --out=udp:127.0.0.1:14550 \
     --out=tcp:127.0.0.1:5760 \
+    --home=-35.363261,149.165230,584,0 \
     --speedup 1 \
     --slave 0 \
     --sim-address=127.0.0.1 \

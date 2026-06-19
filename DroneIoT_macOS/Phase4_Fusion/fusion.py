@@ -251,10 +251,10 @@ def main():
 
             if not snap:
                 frames_skipped += 1
-                if frames_skipped % 5 == 1:  # Log mỗi 5 frame skip
-                    print(f"[FUSION] ⏳ Chờ dữ liệu cảm biến từ BW16... (skip={frames_skipped})")
-                time.sleep(1)
-                continue
+                if frames_skipped % 10 == 1:
+                    print(f"[FUSION] ⏳ BW16 chưa gửi data (skip={frames_skipped}) — ghi GPS với sensor=0")
+                # Không skip — vẫn ghi GPS data với sensor mặc định = 0
+                snap = {"temp": 0.0, "humidity": 0.0, "co2": 0, "rssi": 0}
 
             # Build InfluxDB Point
             lat = msg.lat / 1e7

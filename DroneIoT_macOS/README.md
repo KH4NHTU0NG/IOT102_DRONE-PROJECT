@@ -226,7 +226,111 @@ Mở trình duyệt → truy cập: **http://localhost:3000**
 
 ---
 
+### B6. Setup Grafana Dashboard
+
+> Chỉ làm **1 lần duy nhất** sau khi đã có Data Source InfluxDB.
+
+#### B6.1 Kết nối Grafana với InfluxDB
+1. Mở **http://localhost:3000** → Đăng nhập `admin / admin`
+2. **Connections → Data Sources → Add data source → InfluxDB**
+3. Điền thông tin:
+
+| Trường | Giá trị |
+|--------|---------|
+| **Query Language** | `Flux` |
+| **URL** | `http://influxdb:8086` |
+| **Organization** | `drone_org` |
+| **Token** | *(lấy bằng lệnh bên dưới)* |
+| **Default Bucket** | `drone_data` |
+
+```bash
+# Lấy token từ file (cách nhanh nhất):
+cat ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS/Phase4_Fusion/.influx_token
+```
+
+4. Nhấn **Save & Test** → Phải thấy ✅ `datasource is working`
+
+#### B6.2 Tạo Dashboard 6 Panels
+**Dashboards → New → New Dashboard → nhấn ô Panel (biểu tượng +)**
+
+Với mỗi panel, làm theo thứ tự:
+1. Phần dưới: chọn Data source = **influxdb** → dán Flux query
+2. Phần trên phải: chọn **All visualizations → Time series**
+3. Đổi tên panel → nhấn **Apply**
+
+| Panel | Tiêu đề | Flux query (`_field == ...`) |
+|-------|---------|------------------------------|
+| 1 | `🌡️ Nhiệt độ (°C)` | `"temperature"` |
+| 2 | `💧 Độ ẩm (%)` | `"humidity"` |
+| 3 | `🌫️ Chất lượng khí CO2` | `"co2"` |
+| 4 | `🛫 Độ cao bay (m)` | `"altitude"` |
+| 5 | `📍 Vĩ độ GPS` | `"latitude"` |
+| 6 | `📶 WiFi RSSI` | `"wifi_rssi"` |
+
+**Template query** (chỉ thay phần `"temperature"` thành field tương ứng):
+```flux
+from(bucket: "drone_data")
+  |> range(start: -10m)
+  |> filter(fn: (r) => r._measurement == "drone_telemetry")
+  |> filter(fn: (r) => r._field == "temperature")
+```
+
+Sau khi tạo xong 6 panels → **Save dashboard** → đặt tên `Drone IoT Monitor`
+
+---
+
+### B7. Test toàn hệ thống (không cần mạch BW16)
+
+> ✅ Có thể test được với chỉ SITL. GPS và Altitude sẽ có data thật. Sensor (nhiệt độ, CO2...) sẽ hiện `0` cho đến khi cắm mạch BW16.
+
+#### B7.1 Restart SITL với GPS fix (nếu đang chạy, Ctrl+C rồi chạy lại)
+```bash
+# Tab Terminal SITL (Cmd+T để mở tab mới)
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+bash Phase2_SITL/run_sitl.sh
+```
+Chờ đến khi thấy:
+```
+AP: EKF3 IMU0 origin set   ← GPS đã fix (khoảng 30-60 giây)
+MAV>                        ← Sẵn sàng hoàn toàn
+```
+
+#### B7.2 Chạy fusion.py (Tab Terminal mới)
+```bash
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+source Phase4_Fusion/drone_env/bin/activate
+python3 Phase4_Fusion/fusion.py
+```
+
+✅ Kết quả thành công trông như sau:
+```
+[TOKEN] ✅ Token hợp lệ (length=88)
+[INFLUX] ✅ Kết nối OK — version=2.0.9
+[MQTT] ✅ Kết nối thành công broker 127.0.0.1:1883
+[SITL] ✅ Kết nối thành công! System ID=0
+🚀 Bắt đầu Fusion Loop
+
+[FUSION] ✅ #0001  GPS: (-35.3632, 149.1652, 584.0m)  T=0°C  CO2=0
+[FUSION] ✅ #0002  GPS: (-35.3632, 149.1652, 584.0m)  T=0°C  CO2=0
+```
+
+#### B7.3 Xem data trên Grafana
+1. Mở **http://localhost:3000 → Dashboards → Drone IoT Monitor**
+2. Đổi time range sang **"Last 5 minutes"** (góc trên giữa)
+3. Nhấn **Refresh** (hoặc bật Auto refresh 5s)
+4. Panel **Độ cao bay** và **Vĩ độ GPS** sẽ hiện **đường line thật** từ SITL ✅
+
+#### B7.4 Xử lý nếu SITL vẫn báo `Chờ GPS...`
+Chuyển sang tab SITL, tại dấu nhắc `MAV>` gõ:
+```
+mode guided
+```
+→ fusion.py sẽ nhận GPS ngay lập tức.
+
+---
+
 ## PHẦN C: Dừng hệ thống
+
 
 ```bash
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
