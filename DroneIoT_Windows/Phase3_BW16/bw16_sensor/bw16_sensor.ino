@@ -12,8 +12,8 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 
-const char* ssid        = "TEN_WIFI";          // Tên WiFi của bạn
-const char* password    = "MAT_KHAU_WIFI";     // Mật khẩu WiFi
+const char* ssid        = "TuongHuy";          // Tên WiFi của bạn
+const char* password    = "kminh1983";     // Mật khẩu WiFi
 const char* mqtt_server = "192.168.1.120";     // IP máy tính chạy Broker
 const int   mqtt_port   = 1883;
 
@@ -170,24 +170,35 @@ void setup() {
     Serial.println("  DHT22 + MQ-135 + alert Node");
     Serial.println("==============================");
 
-    // Cấu hình chân output cho LED và Buzzer
+    // [DEBUG 1] Kiểm tra GPIO
+    Serial.println("[DEBUG 1] Cau hinh GPIO...");
     pinMode(LED_PIN, OUTPUT);
     pinMode(LED_GREEN_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
-
-    // Trạng thái ban đầu: LED Xanh sáng, LED Đỏ tắt, Còi tắt
     digitalWrite(LED_GREEN_PIN, HIGH);
     digitalWrite(LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
+    Serial.println("[DEBUG 1] GPIO OK");
 
+    // [DEBUG 2] Khởi tạo DHT22 (an toàn kể cả khi chưa cắm)
+    Serial.println("[DEBUG 2] Khoi tao DHT22...");
     dht.begin();
+    delay(500); // Chờ DHT ổn định
+    Serial.println("[DEBUG 2] DHT22 init xong");
+
+    // [DEBUG 3] Kết nối WiFi
+    Serial.println("[DEBUG 3] Bat dau ket noi WiFi...");
     connectWiFi();
+    Serial.println("[DEBUG 3] WiFi done");
 
+    // [DEBUG 4] Cấu hình MQTT
+    Serial.println("[DEBUG 4] Cau hinh MQTT...");
     client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(callback); // Đăng ký hàm callback
+    client.setCallback(callback);
     client.setKeepAlive(60);
+    Serial.println("[DEBUG 4] MQTT config xong");
 
-    Serial.println("[SYSTEM] Setup hoàn tất. Bắt đầu đọc cảm biến...");
+    Serial.println("[SYSTEM] Setup hoan tat. Bat dau doc cam bien...");
 }
 
 // ── Loop ──────────────────────────────────────────────────
@@ -215,9 +226,15 @@ void loop() {
 
         // Kiểm tra lỗi cảm biến DHT22
         if (isnan(temp) || isnan(hum)) {
-            Serial.println("[DHT22] Lỗi đọc cảm biến! Kiểm tra chân PA_26.");
-            temp = 0.0;
-            hum = 0.0;
+            // Cảm biến chưa cắm hoặc lỗi — thử đọc lại 1 lần
+            delay(200);
+            temp = dht.readTemperature();
+            hum  = dht.readHumidity();
+        }
+        if (isnan(temp) || isnan(hum)) {
+            Serial.println("[DHT22] Chua cam cam bien hoac loi! Kiem tra chan PA_26.");
+            temp = -1.0; // -1 để phân biệt "chưa cắm" vs "đang bình thường 0 độ"
+            hum  = -1.0;
         }
 
         // Đọc MQ-135 (ADC giá trị thô 0-4095)
