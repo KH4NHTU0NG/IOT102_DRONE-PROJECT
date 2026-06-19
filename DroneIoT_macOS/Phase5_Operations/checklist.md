@@ -38,7 +38,7 @@ docker exec -it iot_mqtt mosquitto_pub -t "drone/payload/sensors" \
 
 ### 3. SITL đang chạy
 ```bash
-lsof -i :5760   # Phải thấy process đang giữ port
+lsof -i :5763   # Phải thấy process đang giữ port
 lsof -i :14550  # Phải thấy process đang giữ port
 ```
 
@@ -72,7 +72,7 @@ docker exec iot_db influx query \
 | fusion.py hiện `Cho cam bien` mãi | BW16 không gửi data | Kiểm tra Serial Monitor + IP mqtt_server |
 | QGC không thấy drone | SITL chưa sẵn sàng | Chờ `AP: ArduPilot Ready` trong SITL terminal |
 | Grafana `connection refused` | URL data source sai | Dùng `http://influxdb:8086` (không phải localhost) |
-| Port 5760 bị chiếm | Zombie process | `lsof -ti :5760 \| xargs kill -9` |
+| Port 5763 bị chiếm | Zombie process | `lsof -ti :5763 \| xargs kill -9` |
 | BW16 không upload được | Sai thời điểm BURN+RESET | Làm lại trong đúng 5s đếm ngược của IDE |
 
 ---

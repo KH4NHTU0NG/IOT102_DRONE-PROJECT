@@ -199,7 +199,7 @@ python3 Phase4_Fusion/fusion.py
 ```
 [TOKEN] ✅ Token hợp lệ
 [MQTT] ✅ Kết nối thành công broker 127.0.0.1:1883
-[MAVLink] ✅ Kết nối SITL thành công tcp:127.0.0.1:5760
+[MAVLink] ✅ Kết nối SITL thành công tcp:127.0.0.1:5763
 [Fusion] ✅ Bắt đầu ghi dữ liệu vào InfluxDB...
 [Fusion] GPS: lat=... lon=... alt=...  Temp=28.5°C  AQ=125
 ```
@@ -349,7 +349,7 @@ Hoặc thủ công:
 | Lỗi | Nguyên nhân | Fix |
 |-----|-------------|-----|
 | QGroundControl hiện "Disconnected" | SITL chưa chạy hoặc chưa tới `MAV>` | Chờ thêm hoặc kết nối thủ công UDP 14550 |
-| `PORT 5760 chưa mở` | SITL chưa hoàn tất khởi động | Mở tab riêng chạy `run_sitl.sh` trước |
+| `PORT 5763 chưa mở` | SITL chưa hoàn tất khởi động | Mở tab riêng chạy `run_sitl.sh` trước |
 | `iot_db already in use` | Container cũ còn tồn tại | `docker rm -f iot_db iot_mqtt iot_grafana` |
 | `TOKEN_CUA_BAN chưa set` | Chưa dán token vào fusion.py | Xem lại bước A4 |
 | `No such file or directory` (setup.sh) | Đang đứng sai thư mục | `cd DroneIoT_macOS` trước khi chạy |

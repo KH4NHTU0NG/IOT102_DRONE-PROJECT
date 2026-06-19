@@ -44,13 +44,13 @@ echo "     $ROOT_DIR/Phase2_SITL/run_sitl.sh"
 echo ""
 read -r -p "  Chờ SITL hiện 'MAV>' rồi nhấn Enter để tiếp tục..."
 
-# Verify port 5760
-if ! lsof -i :5760 &>/dev/null; then
-    echo "⚠️  Port 5760 chưa mở — SITL có thể chưa sẵn sàng."
+# Verify port 5763
+if ! lsof -i :5763 &>/dev/null; then
+    echo "⚠️  Port 5763 chưa mở — SITL có thể chưa sẵn sàng."
     echo "   Đợi thêm 30 giây cho SITL build xong."
     sleep 30
 fi
-echo "✅ Port 5760 đang mở."
+echo "✅ Port 5763 đang mở."
 
 # ── Bước 4: Fusion gateway ────────────────────────────────
 echo ""

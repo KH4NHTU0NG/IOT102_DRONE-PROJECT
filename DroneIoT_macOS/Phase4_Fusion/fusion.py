@@ -40,7 +40,7 @@ MQTT_PORT     = 1883
 MQTT_TOPIC    = "drone/payload/sensors"
 
 SITL_HOST     = "127.0.0.1"
-SITL_PORT     = 5760
+SITL_PORT     = 5763
 
 # ══════════════════════════════════════════════════════════
 # Bug fix #3 & #12: Validate TOKEN trước khi bắt đầu
