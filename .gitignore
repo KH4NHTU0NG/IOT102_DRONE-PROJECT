@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+drone_env/
+ENV/
+env/
+
+# Sensitive data
+.influx_token
+
+# Logs
+*.log
+fusion.log
+fusion.pid
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
