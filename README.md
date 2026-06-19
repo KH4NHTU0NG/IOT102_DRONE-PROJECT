@@ -182,21 +182,153 @@ Sau khi nạp code thành công, board vẫn đang ở chế độ chờ nạp (
 
 ---
 
-## 🛠️ Hướng Dẫn Khởi Chạy Nhanh / Quick Start
+## 🚀 HƯỚNG DẪN VẬN HÀNH HỆ THỐNG TOÀN DIỆN (A - Z)
 
-### 1. Chọn phiên bản phù hợp với hệ điều hành của bạn:
-* Nếu sử dụng **macOS**, chuyển vào thư mục: [`DroneIoT_macOS/README.md`](file:///Users/trankhanhtuong/.gemini/antigravity/scratch/IOT102_DRONE-PROJECT/DroneIoT_macOS/README.md)
-* Nếu sử dụng **Windows**, chuyển vào thư mục: [`DroneIoT_Windows/README.md`](file:///Users/trankhanhtuong/.gemini/antigravity/scratch/IOT102_DRONE-PROJECT/DroneIoT_Windows/README.md)
+> [!IMPORTANT]  
+> Quy trình khởi chạy các thành phần phải thực hiện **đúng thứ tự**:  
+> **Docker Server $\rightarrow$ Board BW16 $\rightarrow$ SITL (Drone ảo) $\rightarrow$ Python Gateway (fusion.py) $\rightarrow$ Web Control & Grafana**
 
-### 2. Các bước chuẩn bị quan trọng:
-* **Docker Desktop**: Phải được cài đặt và đang chạy.
-* **Arduino IDE**: Cài đặt AmebaD package & thư viện như hướng dẫn phần cứng ở trên.
-* **Python 3.10+**: Cài đặt trên máy tính làm Gateway Fusion.
+---
+
+### BƯỚC 1: Khởi động Server Docker (MQTT, InfluxDB, Grafana)
+1. Khởi động ứng dụng **Docker Desktop** trên máy tính của bạn.
+2. Mở Terminal (macOS) hoặc Command Prompt (Windows) và di chuyển vào thư mục Docker:
+   * **macOS:**
+     ```bash
+     cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+     bash Phase1_Docker/setup.sh
+     ```
+   * **Windows:**
+     ```cmd
+     cd C:\Users\Tên_User\Desktop\IOT102_DRONE-PROJECT\DroneIoT_Windows
+     Phase1_Docker\setup.bat
+     ```
+3. Sau khi chạy xong, copy chuỗi **InfluxDB Token** dài hiển thị ở màn hình terminal.
+4. Mở file `Phase4_Fusion/fusion.py` bằng trình soạn thảo và dán token này vào dòng cấu hình `INFLUX_TOKEN`:
+   ```python
+   INFLUX_TOKEN = "SỐ_TOKEN_CỦA_BẠN..."
+   ```
+
+---
+
+### BƯỚC 2: Cài đặt và nạp code cho Board BW16
+1. Đấu nối cảm biến DHT22, MQ-135, Buzzer và LED với board BW16 theo sơ đồ đấu nối ở trên.
+2. Kết nối board BW16 vào máy tính qua cáp Micro-USB (cáp có đường truyền dữ liệu).
+3. Mở **Arduino IDE** $\rightarrow$ Chọn file `Phase3_BW16/bw16_sensor.ino`.
+4. Sửa WiFi SSID, Password và IP máy tính của bạn trong code.
+5. Chọn Board là **BW16** và chọn đúng cổng COM.
+6. Tiến hành **nạp code (Upload)** xuống board (đưa board vào chế độ nạp bằng cách giữ nút **BURN** + nhấn **RESET**).
+7. Nhấn **RESET** một lần nữa sau khi nạp thành công để board chạy bình thường và truyền dữ liệu cảm biến.
+
+---
+
+### BƯỚC 3: Khởi động Drone ảo mô phỏng (ArduPilot SITL)
+1. Mở một **Terminal mới** (không chạy chung với các lệnh khác):
+   * **macOS:**
+     ```bash
+     cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+     bash Phase2_SITL/run_sitl.sh
+     ```
+   * **Windows (Mở PowerShell với quyền Admin):**
+     ```powershell
+     cd C:\Users\Tên_User\Desktop\IOT102_DRONE-PROJECT\DroneIoT_Windows
+     powershell Phase2_SITL/run_sitl.ps1
+     ```
+2. Chờ từ 1-2 phút cho đến khi xuất hiện dòng `MAV>` và thông báo định vị GPS `AP: EKF3 IMU0 origin set`.
+3. Mở phần mềm **QGroundControl** lên, phần mềm sẽ tự động kết nối với Drone ảo và hiển thị trạng thái `"Ready to Fly"`.
+
+---
+
+### BƯỚC 4: Khởi chạy Data Fusion Gateway (fusion.py)
+1. Mở một **Terminal mới** thứ hai:
+   * **macOS:**
+     ```bash
+     cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+     source Phase4_Fusion/drone_env/bin/activate
+     python3 Phase4_Fusion/fusion.py
+     ```
+   * **Windows (Mở Command Prompt):**
+     ```cmd
+     cd C:\Users\Tên_User\Desktop\IOT102_DRONE-PROJECT\DroneIoT_Windows
+     Phase4_Fusion\drone_env\Scripts\activate
+     python Phase4_Fusion\fusion.py
+     ```
+2. Màn hình console sẽ bắt đầu in log kết nối thành công tới InfluxDB, MQTT, SITL và hiển thị log dung hợp dữ liệu sau mỗi 1 giây:
+   `[FUSION] ✅ #0001 GPS: (-35.3632, 149.1652, 584.0m) T=28.5°C CO2=412`
+
+---
+
+### BƯỚC 5: Vận hành giao diện điều khiển Web Control
+1. Dùng trình duyệt Web (Chrome, Edge, Safari) mở tệp tin giao diện tĩnh:
+   `Phase5_Operations/web_control/index.html`
+2. Quan sát biểu tượng **Status Badge** ở góc trên bên phải hiển thị **"Đã kết nối"** (màu xanh lá).
+3. **Thao tác điều khiển:**
+   * Nhấn nút **[ARM]** $\rightarrow$ Kích hoạt động cơ drone ảo.
+   * Nhấn nút **[TAKEOFF 10m]** $\rightarrow$ Drone ảo sẽ tự động cất cánh lên độ cao 10 mét (xem chuyển động trên QGroundControl).
+   * Nhấn nút **[BẬT CÒI]** / **[TẮT CÒI]** $\rightarrow$ Điều khiển trực tiếp còi buzzer kêu/tắt trên board BW16.
+
+---
+
+### BƯỚC 6: Trực quan hóa dữ liệu trên Grafana
+1. Truy cập địa chỉ: **http://localhost:3000** (Đăng nhập: `admin` / `admin`).
+2. Vào **Connections $\rightarrow$ Data Sources $\rightarrow$ Add data source $\rightarrow$ InfluxDB**.
+3. Cấu hình các thông số InfluxDB:
+   * **Query Language:** Chọn `Flux`.
+   * **URL:** Điền `http://influxdb:8086`.
+   * **Organization:** Điền `drone_org`.
+   * **Bucket:** Điền `drone_data`.
+   * **Token:** Dán InfluxDB Token thu được ở Bước 1.
+   * Nhấn **Save & Test** để kích hoạt kết nối.
+4. Tạo Dashboard và thêm các panel hiển thị chỉ số nhiệt độ, độ ẩm, độ cao bay.
+5. **Cấu hình Bản đồ Geomap (Hiển thị vị trí & quỹ đạo bay):**
+   * Tạo panel mới, chọn Visualization là **Geomap**.
+   * Nhập câu truy vấn Flux sau:
+     ```flux
+     from(bucket: "drone_data")
+       |> range(start: -30m)
+       |> filter(fn: (r) => r._measurement == "drone_telemetry")
+       |> filter(fn: (r) => r._field == "latitude" or r._field == "longitude")
+       |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+     ```
+   * Ở cột cấu hình bên phải, mục **Map Layer** $\rightarrow$ Chọn Mode là `Coords`, gán **Latitude field** = `latitude`, **Longitude field** = `longitude`. Nhấn **Apply**.
+
+---
+
+## 🧪 CHẠY CÁC KỊCH BẢN KIỂM THỬ TỰ ĐỘNG (INTEGRATION TESTS)
+
+Hệ thống cung cấp sẵn 4 kịch bản kiểm thử tự động tại thư mục `Phase5_Operations/tests/`. Kích hoạt môi trường ảo Python và chạy các lệnh sau:
+
+```bash
+# 1. Kiểm tra tính liên tục của dữ liệu (Yêu cầu khoảng trống dữ liệu >3s < 5%)
+python Phase5_Operations/tests/test_continuity.py
+
+# 2. Đo độ trễ từ cảm biến truyền về DB (Yêu cầu tối đa < 2000ms)
+python Phase5_Operations/tests/test_latency.py
+
+# 3. Stress test MQTT và kiểm tra khả năng chịu lỗi (Tạo tệp báo cáo test_report.txt)
+python Phase5_Operations/tests/test_fault_tolerance.py
+
+# 4. Kiểm tra truyền nhận tin nhắn lệnh Web Control
+python Phase5_Operations/tests/test_web_control.py
+```
+
+---
+
+## 🛑 DỪNG HỆ THỐNG AN TOÀN
+
+Khi kết thúc phiên làm việc, chạy script dừng hệ thống để tắt an toàn toàn bộ container Docker và tiến trình bay ảo:
+* **macOS:**
+  ```bash
+  bash Phase5_Operations/stop_all.sh
+  ```
+* **Windows:**
+  ```cmd
+  Phase5_Operations\stop_all.bat
+  ```
 
 ---
 
 ## 📝 Bản Quyền / License
 
-Dự án này được xây dựng cho môn học **IOT102** - Trường Đại học FPT.
+Dự án này được xây dựng cho môn học **IOT102** - Trường Đại học FPT.  
 *Phát triển bởi Khánh Tường.*
-
