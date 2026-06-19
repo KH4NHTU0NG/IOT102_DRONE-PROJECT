@@ -170,15 +170,36 @@ void setup() {
     Serial.println("  DHT22 + MQ-135 + alert Node");
     Serial.println("==============================");
 
-    // [DEBUG 1] Kiểm tra GPIO
-    Serial.println("[DEBUG 1] Cau hinh GPIO...");
+    // [DEBUG 1] Kiểm tra GPIO — từng bước
+    Serial.println("[D1.1] pinMode LED_PIN (PA_30)...");
+    delay(100);
     pinMode(LED_PIN, OUTPUT);
+    Serial.println("[D1.1] OK");
+
+    Serial.println("[D1.2] pinMode LED_GREEN_PIN (PA_27)...");
+    delay(100);
     pinMode(LED_GREEN_PIN, OUTPUT);
+    Serial.println("[D1.2] OK");
+
+    Serial.println("[D1.3] pinMode BUZZER_PIN (PA_15)...");
+    delay(100);
     pinMode(BUZZER_PIN, OUTPUT);
+    Serial.println("[D1.3] OK");
+
+    Serial.println("[D1.4] digitalWrite LED_GREEN HIGH...");
+    delay(100);
     digitalWrite(LED_GREEN_PIN, HIGH);
+    Serial.println("[D1.4] OK");
+
+    Serial.println("[D1.5] digitalWrite LED_PIN LOW...");
+    delay(100);
     digitalWrite(LED_PIN, LOW);
+    Serial.println("[D1.5] OK");
+
+    Serial.println("[D1.6] digitalWrite BUZZER LOW...");
+    delay(100);
     digitalWrite(BUZZER_PIN, LOW);
-    Serial.println("[DEBUG 1] GPIO OK");
+    Serial.println("[D1.6] OK — GPIO xong!");
 
     // [DEBUG 2] Khởi tạo DHT22 (an toàn kể cả khi chưa cắm)
     Serial.println("[DEBUG 2] Khoi tao DHT22...");
