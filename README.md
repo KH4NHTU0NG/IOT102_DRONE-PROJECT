@@ -190,6 +190,29 @@ Sau khi nạp code thành công, board vẫn đang ở chế độ chờ nạp (
 
 ---
 
+### ⚡ KHỞI ĐỘNG HỆ THỐNG HÀNG NGÀY BẰNG 1 LỆNH DUY NHẤT (Khuyên dùng)
+Sau khi đã nạp code BW16 và dán token InfluxDB vào `fusion.py` thành công lần đầu, bạn có thể khởi động nhanh toàn bộ các cấu phần chạy ngầm bằng tập lệnh tự động hóa:
+
+*   **Dành cho macOS (Mở Terminal):**
+    ```bash
+    cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+    bash Phase5_Operations/start_all.sh
+    ```
+*   **Dành cho Windows (Mở Command Prompt - CMD):**
+    ```cmd
+    cd C:\Users\Tên_User\Desktop\IOT102_DRONE-PROJECT\DroneIoT_Windows
+    Phase5_Operations\start_all.bat
+    ```
+
+**Để dừng toàn bộ hệ thống (dọn dẹp container Docker và tiến trình ngầm):**
+*   **Dành cho macOS:** `bash Phase5_Operations/stop_all.sh`
+*   **Dành cho Windows:** `Phase5_Operations\stop_all.bat`
+
+---
+
+### 🛠️ CHI TIẾT CÁC BƯỚC KHỞI CHẠY THỦ CÔNG (Từng câu lệnh)
+Nếu bạn muốn theo dõi hoặc gỡ lỗi từng thành phần, hãy thực hiện theo trình tự thủ công sau:
+
 ### BƯỚC 1: Khởi động Server Docker (MQTT, InfluxDB, Grafana)
 1. Khởi động ứng dụng **Docker Desktop** trên máy tính của bạn.
 2. Mở Terminal (macOS) hoặc Command Prompt (Windows) và di chuyển vào thư mục Docker:
