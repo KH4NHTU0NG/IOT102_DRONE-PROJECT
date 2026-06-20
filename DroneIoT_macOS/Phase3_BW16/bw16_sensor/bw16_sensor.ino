@@ -1,43 +1,80 @@
 // ============================================================
 // bw16_sensor.ino — Phase 3: Board BW16 (RTL8720DN)
-// Đọc DHT22 (nhiệt độ/độ ẩm) + MQ-135 (CO2/không khí)
-// Gửi JSON qua WiFi lên MQTT Broker
+// Đọc cảm biến DHT22 + MQ-135, đồng bộ trạng thái drone ảo lên OLED,
+// điều khiển cơ cấu nhả phao Servo SG90, vòng LED RGB và giọng nói DFPlayer.
 //
-// Thư viện cần cài (Sketch → Include Library → Manage Libraries):
+// Thư viện cần cài trong Arduino IDE:
 //   - PubSubClient (Nick O'Leary)
 //   - DHT sensor library (Adafruit)
+//   - Adafruit GFX Library (Adafruit)
+//   - Adafruit SSD1306 (Adafruit)
+//   - Adafruit NeoPixel (Adafruit)
 // ============================================================
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_NeoPixel.h>
+#include <SoftwareSerial.h>
+#include <AmebaServo.h>
 
 // ── Cấu hình kết nối ─────────────────────────────────────
-// !! Sửa SSID và PASSWORD thành WiFi của bạn !!
-const char* ssid        = "TuongHuy";       // Tên WiFi (phân biệt hoa thường)
+const char* ssid        = "TuongHuy";       // Tên WiFi
 const char* password    = "kminh1983";      // Mật khẩu WiFi
-const char* mqtt_server = "192.168.1.120";  // IP máy Mac chạy Mosquitto broker
+const char* mqtt_server = "192.168.1.120";  // IP máy chạy MQTT Broker
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
-// QUAN TRỌNG: Không dùng PA_12 (TX Log Console), PA_30 (JTAG), PA_28 (SWD)
-#define DHT_PIN    PA_26   // Chân DATA của DHT22
-#define DHT_TYPE   DHT22
-#define MQ135_PIN  PB_1    // Chân AOUT của MQ-135 (ADC)
+#define DHT_PIN       PA_14   // DATA của DHT22 (Chuyển từ PA_26 để tránh xung đột I2C)
+#define DHT_TYPE      DHT22
+#define MQ135_PIN     PB_1    // AOUT của MQ-135 (ADC)
+#define BUZZER_PIN    PA_15   // Còi Buzzer (Dự phòng)
+#define SERVO_PIN     PA_12   // Chân tín hiệu điều khiển Servo SG90
+#define NEOPIXEL_PIN  PA_13   // Chân tín hiệu điều khiển LED Ring WS2812B
+#define MP3_RX_PIN    PA_27   // RX của SoftwareSerial (kết nối với TX của DFPlayer)
+#define MP3_TX_PIN    PB_3    // TX của SoftwareSerial (kết nối với RX của DFPlayer qua trở 1k)
 
-// Fix F-001: Đổi LED_PIN từ PA_30 (JTAG — gây treo board) sang PB_3
-#define BUZZER_PIN    PA_15  // Còi Buzzer (Active High)
-#define LED_PIN       PB_3   // LED Đỏ (Cảnh báo) — đã đổi từ PA_30 sang PB_3
-#define LED_GREEN_PIN PA_27  // LED Xanh (An toàn)
+// ── Khởi tạo màn hình OLED SSD1306 ───────────────────────
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT  64
+#define OLED_RESET     -1     // Share RESET pin (hoặc -1 nếu không dùng reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// Ngưỡng cảnh báo khí CO2 tự động (thang đo ADC 12-bit thô 0-4095)
+// ── Khởi tạo LED Ring ────────────────────────────────────
+#define NUMPIXELS      8      // Thay đổi thành số lượng bóng LED thực tế (8 hoặc 12)
+Adafruit_NeoPixel pixels(NUMPIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
+// ── Khởi tạo Servo ──────────────────────────────────────
+AmebaServo payloadServo;
+
+// ── Khởi tạo SoftwareSerial cho DFPlayer ─────────────────
+SoftwareSerial mp3Serial(MP3_RX_PIN, MP3_TX_PIN); // RX, TX
+
+// ── Biến trạng thái hệ thống ─────────────────────────────
 const int CO2_THRESHOLD = 600;
 
-// Trạng thái ghi đè từ MQTT (Quyền ưu tiên cao nhất)
+enum SystemState {
+  STATE_NORMAL,
+  STATE_ALARM,
+  STATE_DROPPING,
+  STATE_RESETTING
+};
+SystemState current_state = STATE_NORMAL;
+
+// Trạng thái điều khiển thủ công qua MQTT (Ưu tiên cao nhất)
 bool mqtt_buzzer_override = false;
 bool mqtt_buzzer_state    = false;
-bool mqtt_led_override    = false;
-bool mqtt_led_state       = false;
+
+// Trạng thái Drone ảo (Cập nhật từ gateway)
+bool   drone_armed = false;
+String drone_mode  = "DISARMED";
+float  drone_alt   = 0.0;
+
+// Trạng thái chốt thả phao
+bool payload_released = false;
 
 // ── Khởi tạo đối tượng ───────────────────────────────────
 WiFiClient   wifiClient;
@@ -47,8 +84,27 @@ DHT          dht(DHT_PIN, DHT_TYPE);
 unsigned long lastMsg = 0;
 const long    interval = 2000;   // Gửi dữ liệu mỗi 2 giây
 
+// ── Hàm gửi lệnh Hex tới DFPlayer Mini ────────────────────
+void sendMp3Cmd(byte cmd, byte param1, byte param2) {
+  uint16_t checksum = 0xFFFF - (0xFF + 0x06 + cmd + 0x00 + param1 + param2) + 1;
+  byte packet[10] = {
+    0x7E,                       // Start byte
+    0xFF,                       // Version
+    0x06,                       // Length
+    cmd,                        // Command
+    0x00,                       // Feedback (0x00 = no feedback)
+    param1,                     // Parameter High
+    param2,                     // Parameter Low
+    (byte)(checksum >> 8),      // Checksum High
+    (byte)(checksum & 0xFF),    // Checksum Low
+    0xEF                        // End byte
+  };
+  for (int i = 0; i < 10; i++) {
+    mp3Serial.write(packet[i]);
+  }
+}
+
 // ── Hàm trích xuất giá trị JSON đơn giản ────────────────
-// Fix F-005: Dùng String thay vì VLA để an toàn trên mọi compiler
 String parseJsonField(const String& json, const String& key) {
     int keyIndex = json.indexOf("\"" + key + "\"");
     if (keyIndex == -1) return "";
@@ -72,47 +128,183 @@ String parseJsonField(const String& json, const String& key) {
     }
 }
 
+// ── Hàm cập nhật hiển thị OLED ───────────────────────────
+void drawOLED(float temp, float hum, int mq_raw, bool is_alert) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    
+    // Dòng 1: WiFi & RSSI
+    display.setCursor(0, 0);
+    if (WiFi.status() == WL_CONNECTED) {
+        display.print("WiFi: OK [");
+        display.print(WiFi.RSSI());
+        display.print("dBm]");
+    } else {
+        display.print("WiFi: LOI");
+    }
+    
+    // Dòng 2: Cảm biến DHT22
+    display.setCursor(0, 16);
+    display.print("Temp: ");
+    display.print(temp, 1);
+    display.print("C Hum: ");
+    display.print(hum, 0);
+    display.print("%");
+    
+    // Dòng 3: Cảm biến Khí gas MQ-135
+    display.setCursor(0, 32);
+    display.print("Air: ");
+    display.print(mq_raw);
+    display.print(is_alert ? " [BAO DONG]" : " [AN TOAN]");
+    
+    // Dòng 4: Telemetry Drone ảo
+    display.setCursor(0, 48);
+    display.print("Drone: ");
+    if (drone_armed) {
+        display.print("ARM (");
+        display.print(drone_mode);
+        display.print(") ");
+        display.print(drone_alt, 1);
+        display.print("m");
+    } else {
+        display.print("DISARMED");
+    }
+    
+    // Dòng 5: Trạng thái chốt nhả phao
+    display.setCursor(0, 56);
+    display.print("Phao: ");
+    if (payload_released) {
+        display.print("DA THA [SERVO 90]");
+    } else {
+        display.print("READY  [SERVO 0]");
+    }
+    
+    display.display();
+}
+
+// ── Hàm hiệu ứng vòng LED NeoPixel (Không chặn - Non-blocking) ──
+void animateLEDs() {
+    static unsigned long lastUpdate = 0;
+    static int pixelIndex = 0;
+    unsigned long now = millis();
+    
+    if (current_state == STATE_NORMAL) {
+        // Hiệu ứng "nhịp thở" màu xanh lá
+        if (now - lastUpdate > 30) {
+            lastUpdate = now;
+            static int brightness = 10;
+            static int fadeAmount = 2;
+            brightness += fadeAmount;
+            if (brightness <= 5 || brightness >= 80) {
+                fadeAmount = -fadeAmount;
+            }
+            for (int i = 0; i < NUMPIXELS; i++) {
+                pixels.setPixelColor(i, pixels.Color(0, brightness, 0));
+            }
+            pixels.show();
+        }
+    } else if (current_state == STATE_ALARM) {
+        // Nháy đỏ dồn dập
+        if (now - lastUpdate > 200) {
+            lastUpdate = now;
+            static bool toggle = false;
+            toggle = !toggle;
+            for (int i = 0; i < NUMPIXELS; i++) {
+                pixels.setPixelColor(i, toggle ? pixels.Color(180, 0, 0) : pixels.Color(0, 0, 0));
+            }
+            pixels.show();
+        }
+    } else if (current_state == STATE_DROPPING) {
+        // Đèn đuổi vòng màu cam
+        if (now - lastUpdate > 80) {
+            lastUpdate = now;
+            pixels.clear();
+            pixels.setPixelColor(pixelIndex, pixels.Color(200, 60, 0));
+            pixels.setPixelColor((pixelIndex + 1) % NUMPIXELS, pixels.Color(230, 90, 0));
+            pixels.setPixelColor((pixelIndex + 2) % NUMPIXELS, pixels.Color(255, 120, 0));
+            pixels.show();
+            pixelIndex = (pixelIndex + 1) % NUMPIXELS;
+        }
+    } else if (current_state == STATE_RESETTING) {
+        // Nháy xanh dương xác nhận
+        if (now - lastUpdate > 100) {
+            lastUpdate = now;
+            static int flashCount = 0;
+            static bool toggle = false;
+            toggle = !toggle;
+            for (int i = 0; i < NUMPIXELS; i++) {
+                pixels.setPixelColor(i, toggle ? pixels.Color(0, 0, 180) : pixels.Color(0, 0, 0));
+            }
+            pixels.show();
+            flashCount++;
+            if (flashCount > 10) { // 5 lần chớp nháy
+                flashCount = 0;
+                current_state = STATE_NORMAL;
+            }
+        }
+    }
+}
+
 // ── Hàm Callback nhận lệnh MQTT ─────────────────────────
-// Fix F-005: Dùng String thay VLA char message[length+1]
 void callback(char* topic, byte* payload, unsigned int length) {
     String msgString = "";
     for (unsigned int i = 0; i < length; i++) {
         msgString += (char)payload[i];
     }
 
-    Serial.print("[MQTT] Nhan lenh tu topic [");
+    Serial.print("[MQTT] Nhan tu [");
     Serial.print(topic);
     Serial.print("]: ");
     Serial.println(msgString);
 
-    String command = parseJsonField(msgString, "command");
+    // 1. Xử lý dữ liệu đồng bộ Telemetry của Drone ảo
+    if (String(topic) == "drone/status/telemetry") {
+        String armedStr = parseJsonField(msgString, "armed");
+        String modeStr  = parseJsonField(msgString, "mode");
+        String altStr   = parseJsonField(msgString, "alt");
 
-    if (command == "BUZZER_ON") {
-        mqtt_buzzer_override = true;
-        mqtt_buzzer_state    = true;
-        digitalWrite(BUZZER_PIN, HIGH);
-        Serial.println("[CONTROL] MQTT override: BAT COI");
-    } else if (command == "BUZZER_OFF") {
-        mqtt_buzzer_override = true;
-        mqtt_buzzer_state    = false;
-        digitalWrite(BUZZER_PIN, LOW);
-        Serial.println("[CONTROL] MQTT override: TAT COI");
-    } else if (command == "LED_ON") {
-        mqtt_led_override = true;
-        mqtt_led_state    = true;
-        digitalWrite(LED_PIN, HIGH);
-        digitalWrite(LED_GREEN_PIN, LOW);
-        Serial.println("[CONTROL] MQTT override: BAT LED DO");
-    } else if (command == "LED_OFF") {
-        mqtt_led_override = true;
-        mqtt_led_state    = false;
-        digitalWrite(LED_PIN, LOW);
-        digitalWrite(LED_GREEN_PIN, HIGH);
-        Serial.println("[CONTROL] MQTT override: BAT LED XANH");
-    } else if (command == "RESET") {
-        mqtt_buzzer_override = false;
-        mqtt_led_override    = false;
-        Serial.println("[CONTROL] Khoi phuc che do tu dong");
+        if (armedStr == "true" || armedStr == "1") {
+            drone_armed = true;
+        } else {
+            drone_armed = false;
+        }
+        if (modeStr != "") drone_mode = modeStr;
+        if (altStr != "")  drone_alt  = altStr.toFloat();
+        return;
+    }
+
+    // 2. Xử lý lệnh điều khiển thiết bị
+    if (String(topic) == "drone/control/payload") {
+        String command = parseJsonField(msgString, "command");
+
+        if (command == "DROP") {
+            payload_released = true;
+            current_state = STATE_DROPPING;
+            payloadServo.write(90); // Xoay Servo mở chốt thả phao
+            sendMp3Cmd(0x12, 0x00, 2); // Phát file nhạc số 2 (Cảnh báo thả phao)
+            Serial.println("[PAYLOAD] Kich hoat tha phao cuu sinh!");
+        } else if (command == "RESET_PAYLOAD") {
+            payload_released = false;
+            current_state = STATE_RESETTING;
+            payloadServo.write(0);  // Xoay Servo đóng chốt về 0 độ
+            sendMp3Cmd(0x12, 0x00, 3); // Phát file nhạc số 3 (Đã reset chốt thả)
+            Serial.println("[PAYLOAD] Reset chot tha phao ve vi tri khoa.");
+        } else if (command == "BUZZER_ON") {
+            mqtt_buzzer_override = true;
+            mqtt_buzzer_state    = true;
+            digitalWrite(BUZZER_PIN, HIGH);
+        } else if (command == "BUZZER_OFF") {
+            mqtt_buzzer_override = true;
+            mqtt_buzzer_state    = false;
+            digitalWrite(BUZZER_PIN, LOW);
+        } else if (command == "RESET") {
+            mqtt_buzzer_override = false;
+            current_state = STATE_NORMAL;
+            payloadServo.write(0);
+            payload_released = false;
+            Serial.println("[CONTROL] Khoi phuc che do tu dong");
+        }
     }
 }
 
@@ -137,7 +329,7 @@ void connectWiFi() {
         Serial.println(WiFi.localIP());
     } else {
         Serial.println();
-        Serial.println("[WiFi] That bai sau 30 lan thu. Se thu lai sau...");
+        Serial.println("[WiFi] That bai sau 30 lan thu.");
     }
 }
 
@@ -150,7 +342,8 @@ void connectMQTT() {
         if (client.connect("BW16_Payload")) {
             Serial.println(" OK!");
             client.subscribe("drone/control/payload");
-            Serial.println("[MQTT] Da subscribe: drone/control/payload");
+            client.subscribe("drone/status/telemetry");
+            Serial.println("[MQTT] Da dang ky cac topic dieu khien & telemetry");
         } else {
             Serial.print(" That bai, rc=");
             Serial.print(client.state());
@@ -167,26 +360,51 @@ void setup() {
     delay(1000);
 
     Serial.println("==============================");
-    Serial.println("  BW16 Drone IoT Payload");
-    Serial.println("  DHT22 + MQ-135 + alert Node");
-    Serial.println("  v2.0 - Fixed PA_30->PB_3");
+    Serial.println("  BW16 Drone IoT - Extended");
+    Serial.println("  SSD1306 + SG90 + WS2812B + DFPlayer");
     Serial.println("==============================");
 
-    // Cấu hình GPIO (Fix F-001: LED_PIN = PB_3, không còn dùng PA_30)
+    // Cấu hình còi
     pinMode(BUZZER_PIN, OUTPUT);
-    pinMode(LED_PIN, OUTPUT);
-    pinMode(LED_GREEN_PIN, OUTPUT);
-
-    // Trạng thái ban đầu: LED Xanh sáng, LED Đỏ tắt, Còi tắt
     digitalWrite(BUZZER_PIN, LOW);
-    digitalWrite(LED_PIN, LOW);
-    digitalWrite(LED_GREEN_PIN, HIGH);
-    Serial.println("[INIT] GPIO OK");
+
+    // Khởi tạo I2C và Màn hình OLED
+    Wire.begin(); // Sử dụng chân mặc định SCL=PA_25, SDA=PA_26
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Địa chỉ I2C thông dụng của OLED là 0x3C
+        Serial.println(F("[OLED] SSD1306 init that bai!"));
+    } else {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0, 0);
+        display.println("System Booting...");
+        display.display();
+        Serial.println("[INIT] OLED Screen OK");
+    }
+
+    // Khởi tạo LED Ring WS2812B
+    pixels.begin();
+    pixels.setBrightness(40); // Đặt độ sáng vừa phải tránh sụt áp nguồn
+    pixels.clear();
+    pixels.show();
+    Serial.println("[INIT] WS2812B LED Ring OK");
+
+    // Khởi tạo Servo SG90
+    payloadServo.attach(SERVO_PIN);
+    payloadServo.write(0); // Chốt ban đầu khóa ở góc 0 độ
+    Serial.println("[INIT] SG90 Servo OK");
+
+    // Khởi tạo SoftwareSerial cho DFPlayer Mini
+    mp3Serial.begin(9600); // DFPlayer Mini giao tiếp ở baudrate mặc định 9600
+    delay(500);
+    sendMp3Cmd(0x06, 0x00, 20); // Thiết lập âm lượng ở mức 20 (max 30)
+    delay(100);
+    sendMp3Cmd(0x12, 0x00, 1); // Phát file nhạc số 1 (Chào mừng hệ thống hoạt động)
+    Serial.println("[INIT] DFPlayer Mini MP3 OK");
 
     // Khởi tạo DHT22
     dht.begin();
     delay(500);
-    Serial.println("[INIT] DHT22 init xong");
 
     // Kết nối WiFi
     connectWiFi();
@@ -201,70 +419,72 @@ void setup() {
 
 // ── Loop ──────────────────────────────────────────────────
 void loop() {
-    // Tự động reconnect WiFi nếu mất kết nối
     if (WiFi.status() != WL_CONNECTED) {
         connectWiFi();
     }
 
-    // Tự động reconnect MQTT
     if (WiFi.status() == WL_CONNECTED && !client.connected()) {
         connectMQTT();
     }
 
     client.loop();
 
-    // Đọc cảm biến và gửi dữ liệu (non-blocking dùng millis)
+    // Cập nhật hiệu ứng LED (Non-blocking)
+    animateLEDs();
+
+    // Đọc cảm biến và gửi dữ liệu định kỳ
     unsigned long now = millis();
     if (now - lastMsg >= interval) {
         lastMsg = now;
 
-        // Đọc DHT22 (Nhiệt độ, Độ ẩm)
+        // Đọc cảm biến DHT22
         float temp = dht.readTemperature();
         float hum  = dht.readHumidity();
-
-        // Fix F-002: Không dùng delay() trong loop — thử 1 lần rồi thôi
-        // Fix F-003: Gán 0.0 khi lỗi (không phải -1.0) để UI hiển thị đúng
         bool dht_ok = true;
         if (isnan(temp) || isnan(hum)) {
-            Serial.println("[DHT22] Loi doc cam bien! Kiem tra chan PA_26.");
             temp   = 0.0;
             hum    = 0.0;
             dht_ok = false;
         }
 
-        // Đọc MQ-135 (ADC giá trị thô 0-4095)
+        // Đọc cảm biến khí gas MQ-135 (ADC thô)
         int mq_raw = analogRead(MQ135_PIN);
 
-        // Xác định trạng thái cảnh báo tự động onboard
+        // Logic báo động tự động dựa trên cảm biến khí gas thật
         bool is_alert = (mq_raw > CO2_THRESHOLD);
 
-        // ── ĐIỀU KHIỂN CÒI BUZZER (Ưu tiên MQTT > Tự động) ──
+        if (is_alert) {
+            if (current_state == STATE_NORMAL) {
+                current_state = STATE_ALARM;
+                sendMp3Cmd(0x12, 0x00, 4); // Phát file nhạc báo động số 4 (Cảnh báo khí gas nguy hiểm)
+            }
+        } else {
+            if (current_state == STATE_ALARM) {
+                current_state = STATE_NORMAL;
+            }
+        }
+
+        // Điều khiển còi (Ưu tiên lệnh MQTT > Tự động)
         if (mqtt_buzzer_override) {
             digitalWrite(BUZZER_PIN, mqtt_buzzer_state ? HIGH : LOW);
         } else {
             digitalWrite(BUZZER_PIN, is_alert ? HIGH : LOW);
         }
 
-        // ── ĐIỀU KHIỂN ĐÈN LED (Ưu tiên MQTT > Tự động) ──
-        if (mqtt_led_override) {
-            digitalWrite(LED_PIN,       mqtt_led_state ? HIGH : LOW);
-            digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LOW  : HIGH);
-        } else {
-            digitalWrite(LED_PIN,       is_alert ? HIGH : LOW);
-            digitalWrite(LED_GREEN_PIN, is_alert ? LOW  : HIGH);
-        }
+        // Cập nhật màn hình OLED SSD1306
+        drawOLED(temp, hum, mq_raw, is_alert);
 
-        // Đóng gói dữ liệu JSON (có thêm field dht_ok để debug)
+        // Đóng gói JSON gửi dữ liệu
         String payload = "{";
-        payload += "\"temp\":"     + String(temp, 1);
-        payload += ",\"humidity\":" + String(hum, 1);
-        payload += ",\"co2\":"     + String(mq_raw);
-        payload += ",\"alert\":"   + String(is_alert ? 1 : 0);
-        payload += ",\"rssi\":"    + String(WiFi.RSSI());
-        payload += ",\"dht_ok\":"  + String(dht_ok ? 1 : 0);
+        payload += "\"temp\":"      + String(temp, 1);
+        payload += ",\"humidity\":"  + String(hum, 1);
+        payload += ",\"co2\":"      + String(mq_raw);
+        payload += ",\"alert\":"    + String(is_alert ? 1 : 0);
+        payload += ",\"rssi\":"     + String(WiFi.RSSI());
+        payload += ",\"payload_released\":" + String(payload_released ? 1 : 0);
+        payload += ",\"dht_ok\":"   + String(dht_ok ? 1 : 0);
         payload += "}";
 
-        // Publish lên MQTT broker
         if (client.connected() && client.publish("drone/payload/sensors", payload.c_str())) {
             Serial.print("[SEND] ");
             Serial.println(payload);
