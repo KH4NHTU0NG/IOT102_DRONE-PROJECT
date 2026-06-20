@@ -226,18 +226,14 @@ def mavlink_loop():
             continue
 
         try:
-            msg = m.recv_match(type=['GLOBAL_POSITION_INT', 'HEARTBEAT'], blocking=True, timeout=0.5)
+            msg = m.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1.0)
             if msg is not None:
-                msg_type = msg.get_type()
                 with state_lock:
-                    if msg_type == 'GLOBAL_POSITION_INT':
-                        gps_data["lat"] = msg.lat / 1e7
-                        gps_data["lon"] = msg.lon / 1e7
-                        gps_data["alt"] = msg.alt / 1000.0
-                    
-                    # Luôn cập nhật trạng thái armed và chế độ bay từ heartbeat/connection object
-                    gps_data["armed"] = m.motors_armed()
-                    gps_data["mode"] = m.flightmode
+                    gps_data = {
+                        "lat": msg.lat / 1e7,
+                        "lon": msg.lon / 1e7,
+                        "alt": msg.alt / 1000.0
+                    }
         except Exception as e:
             print(f"[MAVLINK] Lỗi đọc gói tin: {e}. Đang reconnect...")
             with master_lock:
@@ -260,7 +256,7 @@ def main():
     write_api = influx.write_api(write_options=SYNCHRONOUS)
 
     # Khởi động MQTT
-    mqtt_client = start_mqtt()
+    start_mqtt()
 
     # Khởi động kết nối SITL lần đầu
     try:
@@ -290,37 +286,13 @@ def main():
             lat = gps.get("lat", 0.0)
             lon = gps.get("lon", 0.0)
             alt = gps.get("alt", 0.0)
-            armed = gps.get("armed", False)
-            mode = gps.get("mode", "DISARMED")
 
             # Fix P-005: Clip giá trị âm (DHT22 báo lỗi gửi -1.0) về 0 để UI hiển thị đúng
             temp = max(0.0, float(sensor.get("temp", 0.0)))
             hum  = max(0.0, float(sensor.get("humidity", 0.0)))
             co2  = max(0, int(sensor.get("co2", 0)))
-            alert = int(sensor.get("alert", 0))
-            rssi  = int(sensor.get("rssi", 0))
-            payload_released = int(sensor.get("payload_released", 0))
-
-            # 🚨 Đồng bộ hóa Telemetry của Drone ảo lên MQTT để hiển thị OLED trên BW16
-            telemetry_payload = {
-                "armed": int(armed),
-                "mode": mode,
-                "alt": round(alt, 1)
-            }
-            try:
-                mqtt_client.publish("drone/status/telemetry", json.dumps(telemetry_payload))
-            except Exception as mqtt_err:
-                print(f"[MQTT] Không thể gửi telemetry lên board: {mqtt_err}")
-
-            # 🚨 Thuật toán tự động thả phao (Auto-Drop):
-            # Nếu cảm biến báo động (alert == 1) VÀ drone đang bay (armed == True) VÀ phao chưa thả
-            if alert == 1 and armed and not payload_released:
-                print("[FUSION] 🚨 PHÁT HIỆN SỰ CỐ! Tự động gửi lệnh DROP phao cứu sinh...")
-                drop_cmd = {"command": "DROP"}
-                try:
-                    mqtt_client.publish("drone/control/payload", json.dumps(drop_cmd))
-                except Exception as mqtt_err:
-                    print(f"[MQTT] Gửi lệnh DROP thất bại: {mqtt_err}")
+            alert = sensor.get("alert", 0)
+            rssi  = sensor.get("rssi", 0)
 
             point = (
                 Point("drone_telemetry")
@@ -332,16 +304,14 @@ def main():
                 .field("co2",         float(co2))
                 .field("alert",       float(alert))
                 .field("wifi_rssi",   float(rssi))
-                .field("payload_released", float(payload_released))
-                .field("drone_armed", float(1.0 if armed else 0.0))
             )
 
             try:
                 write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
                 frames_written += 1
                 print(f"[FUSION] ✅ #{frames_written:04d} "
-                      f"GPS: ({lat:.5f}, {lon:.5f}, {alt:.1f}m, Armed={armed}, Mode={mode}) "
-                      f"T={temp}°C, H={hum}%, CO2={co2}, Alert={alert}, Phao={payload_released}")
+                      f"GPS: ({lat:.5f}, {lon:.5f}, {alt:.1f}m) "
+                      f"T={temp}°C, H={hum}%, CO2={co2}, Alert={alert}")
             except Exception as db_err:
                 print(f"[INFLUX] ❌ Ghi DB thất bại: {db_err}")
 

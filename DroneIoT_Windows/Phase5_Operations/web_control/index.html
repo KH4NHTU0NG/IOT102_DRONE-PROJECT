@@ -378,13 +378,9 @@
                     <span class="telemetry-label">Mức độ cảnh báo</span>
                     <span id="alert_value" class="telemetry-val">AN TOÀN</span>
                 </div>
-                <div class="telemetry-item">
+                <div class="telemetry-item" style="border: none; padding-bottom: 0;">
                     <span class="telemetry-label">RSSI Wi-Fi BW16</span>
                     <span id="rssi_value" class="telemetry-val" style="color: var(--primary-blue)">--<span>dBm</span></span>
-                </div>
-                <div class="telemetry-item" style="border: none; padding-bottom: 0;">
-                    <span class="telemetry-label">Trạng thái phao cứu sinh</span>
-                    <span id="payload_status" class="telemetry-val" style="color: var(--success-green)">ĐÃ NẠP (KHOÁ)</span>
                 </div>
             </div>
         </div>
@@ -417,23 +413,19 @@
 
         <!-- Alarm / Payload Commands -->
         <div class="card">
-            <h2>Điều Khiển Cảnh Báo & Nhả Phao (BW16)</h2>
+            <h2>Điều Khiển Cảnh Báo (BW16)</h2>
             <div class="button-grid" style="grid-template-columns: 1fr;">
-                <!-- Cụm thả phao cứu sinh -->
-                <button class="btn btn-red" onclick="sendPayloadCommand('DROP')" style="background: linear-gradient(135deg, #ef4444, #b91c1c); font-size: 1rem; padding: 1rem;">
-                    ⚠️ THẢ PHAO CỨU SINH (SERVO 90°)
+                <button class="btn btn-red" onclick="sendPayloadCommand('BUZZER_ON')">
+                    BẬT CÒI CẢNH BÁO
                 </button>
-                <button class="btn btn-blue" onclick="sendPayloadCommand('RESET_PAYLOAD')">
-                    Nạp lại / Reset chốt phao (SERVO 0°)
+                <button class="btn btn-cyan" onclick="sendPayloadCommand('BUZZER_OFF')">
+                    TẮT CÒI CẢNH BÁO
                 </button>
-                
-                <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); margin: 0.5rem 0;"></div>
-                
                 <div style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-red" onclick="sendPayloadCommand('BUZZER_ON')" style="flex: 1; padding: 0.6rem;">BẬT CÒI</button>
-                    <button class="btn btn-cyan" onclick="sendPayloadCommand('BUZZER_OFF')" style="flex: 1; padding: 0.6rem;">TẮT CÒI</button>
+                    <button class="btn btn-blue" onclick="sendPayloadCommand('LED_ON')" style="flex: 1;">BẬT LED</button>
+                    <button class="btn btn-cyan" onclick="sendPayloadCommand('LED_OFF')" style="flex: 1;">TẮT LED</button>
                 </div>
-                <button class="btn" onclick="sendPayloadCommand('RESET')" style="background: linear-gradient(135deg, #475569, #334155); box-shadow: none; padding: 0.6rem;">
+                <button class="btn" onclick="sendPayloadCommand('RESET')" style="background: linear-gradient(135deg, #475569, #334155); box-shadow: none;">
                     Khôi Phục Tự Động Onboard
                 </button>
             </div>
@@ -549,19 +541,6 @@
 
                 if (data.rssi != null) {
                     document.getElementById('rssi_value').innerHTML = `${data.rssi}<span>dBm</span>`;
-                }
-
-                // Cập nhật trạng thái thả phao cứu trợ
-                const payloadReleased = (data.payload_released != null) ? data.payload_released : 0;
-                const statusEl = document.getElementById('payload_status');
-                if (payloadReleased === 1) {
-                    statusEl.innerText = "ĐÃ THẢ (MỞ CHỐT)";
-                    statusEl.style.color = "var(--warning-red)";
-                    statusEl.className = "telemetry-val alert-active";
-                } else {
-                    statusEl.innerText = "ĐÃ NẠP (KHOÁ)";
-                    statusEl.style.color = "var(--success-green)";
-                    statusEl.className = "telemetry-val";
                 }
 
             } catch (e) {
