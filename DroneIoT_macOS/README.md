@@ -1,281 +1,233 @@
-# Drone IoT — macOS Apple Silicon
+# Drone IoT — macOS (Apple Silicon)
 
-> ✅ Kiểm chứng thực tế trên: macOS M-series (Apple Silicon)
-> 🔧 Đã fix 12 bugs so với tài liệu gốc
+Hướng dẫn dành riêng cho macOS M1/M2/M3/M4. Đọc README gốc để hiểu tổng quan kiến trúc hệ thống.
+
+---
+
+## Mục lục
+
+1. [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+2. [Cấu trúc thư mục](#cấu-trúc-thư-mục)
+3. [Cài đặt lần đầu](#cài-đặt-lần-đầu)
+4. [Nạp firmware BW16](#nạp-firmware-bw16)
+5. [Khởi động hàng ngày](#khởi-động-hàng-ngày)
+6. [Cấu hình Grafana](#cấu-hình-grafana)
+7. [Web Control](#web-control)
+8. [Kiểm thử tự động](#kiểm-thử-tự-động)
+9. [Dừng hệ thống](#dừng-hệ-thống)
+10. [Xử lý sự cố](#xử-lý-sự-cố)
+
+---
+
+## Yêu cầu hệ thống
+
+- Mac chip Apple Silicon (M1/M2/M3/M4), RAM tối thiểu 8GB
+- Docker Desktop for Mac (bản Apple Silicon)
+- Arduino IDE 2.x
+- QGroundControl
+- Python 3.11+
+- Board BW16 (RTL8720DN) + cáp USB data
+
+---
 
 ## Cấu trúc thư mục
 
 ```
 DroneIoT_macOS/
-├── Phase1_Docker/          ← MQTT + InfluxDB + Grafana
+├── Phase1_Docker/
 │   ├── docker-compose.yml
 │   ├── mosquitto/mosquitto.conf
-│   └── setup.sh            ← Chạy đầu tiên (1 lần duy nhất)
-├── Phase2_SITL/            ← Drone ảo ArduPilot
-│   ├── install_sitl.sh     ← Cài 1 lần
-│   └── run_sitl.sh         ← Chạy MỖI LẦN dùng hệ thống
-├── Phase3_BW16/            ← Firmware cảm biến vật lý
-│   ├── bw16_sensor.ino
+│   └── setup.sh              -- Chạy 1 lần đầu
+├── Phase2_SITL/
+│   ├── install_sitl.sh       -- Cài 1 lần
+│   └── run_sitl.sh           -- Chạy mỗi phiên
+├── Phase3_BW16/
+│   ├── bw16_sensor/
+│   │   └── bw16_sensor.ino   -- Firmware chinh
 │   └── wiring_diagram.md
-├── Phase4_Fusion/          ← Python Gateway
-│   ├── fusion.py           ← Script dung hợp dữ liệu
+├── Phase4_Fusion/
+│   ├── fusion.py
 │   ├── requirements.txt
-│   └── setup_venv.sh       ← Tạo môi trường (1 lần)
-└── Phase5_Operations/      ← Vận hành hàng ngày
-    ├── start_all.sh        ← Khởi động tổng thể
-    ├── stop_all.sh         ← Dừng toàn bộ
-    ├── grafana_queries.md
-    └── checklist.md
+│   └── setup_venv.sh         -- Tạo venv 1 lần
+└── Phase5_Operations/
+    ├── start_all.sh
+    ├── stop_all.sh
+    ├── web_control/index.html
+    └── tests/
 ```
 
 ---
 
-## 🚀 HƯỚNG DẪN KHỞI ĐỘNG ĐẦY ĐỦ (ĐÃ KIỂM CHỨNG)
+## Cài đặt lần đầu
 
-> ⚠️ **Đọc kỹ phần này trước khi bắt đầu!**
-> Các bước phải thực hiện **đúng thứ tự**. Sai thứ tự → hệ thống không kết nối được.
+> Chỉ thực hiện 1 lần duy nhất.
 
----
-
-## PHẦN A: Cài đặt lần đầu (Chỉ làm 1 lần duy nhất)
-
-### A1. Cài đặt phần mềm nền tảng
+### Bước 1 — Cài phần mềm nền
 
 ```bash
-# Cài Homebrew (nếu chưa có)
+# Homebrew (nếu chưa có)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Cài Python 3 và pip
+# Python 3.11
 brew install python@3.11
 ```
 
-- **Docker Desktop**: Tải tại https://www.docker.com/products/docker-desktop/ → Chọn bản **Apple Silicon (M1/M2/M3/M4)**
-- **Arduino IDE 2.x**: Tải tại https://www.arduino.cc/en/software
-- **QGroundControl**: Tải tại https://qgroundcontrol.com/downloads/
+Tải thêm:
+- Docker Desktop: https://www.docker.com/products/docker-desktop (chọn bản Apple Silicon)
+- Arduino IDE 2.x: https://www.arduino.cc/en/software
+- QGroundControl: https://qgroundcontrol.com/downloads
 
-### A2. Dựng server Docker (MQTT + InfluxDB + Grafana)
+### Bước 2 — Dựng Docker server
 
-> Mở Docker Desktop trước, chờ icon ở thanh menu chuyển sang **màu trắng/xanh** (Engine running).
+Mở Docker Desktop, chờ icon ở thanh menu ổn định, rồi chạy:
 
 ```bash
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 bash Phase1_Docker/setup.sh
 ```
 
-✅ Kết quả mong đợi:
-```
-✅ Phase 1 hoàn tất!
-  Grafana:  http://localhost:3000
-  InfluxDB: http://localhost:8086
-  MQTT:     localhost:1883
+Terminal sẽ in ra một chuỗi InfluxDB Token dài. Token cũng được tự động lưu vào `Phase4_Fusion/.influx_token` — không cần làm thêm gì.
 
-→ Lấy InfluxDB API Token...
-InfluxDB Token (copy ngay, dán vào fusion.py):
-  <TOKEN DÀI XUẤT HIỆN Ở ĐÂY>
-→ Token cũng được lưu tại: Phase4_Fusion/.influx_token
-```
-
-> 📋 **Copy toàn bộ chuỗi Token** được in ra — dùng ở bước A4.
-
-### A3. Cài đặt ArduPilot SITL
-
-> ⚠️ Bước này mất **15–30 phút** để clone và build lần đầu. Đừng đóng Terminal!
+Kiểm tra 3 container đang chạy:
 
 ```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-bash Phase2_SITL/install_sitl.sh
-```
-
-✅ Kết quả mong đợi ở cuối:
-```
-✅ Cài đặt ArduPilot SITL hoàn tất!
-   PATH đã được thêm vào ~/.zshrc
-```
-
-**Sau khi xong → Đóng Terminal hiện tại và mở Terminal MỚI** (để PATH reload đúng).
-
-### A4. Dán InfluxDB Token vào fusion.py
-
-```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-nano Phase4_Fusion/fusion.py
-```
-
-Dùng phím mũi tên di chuyển đến **dòng 34**, sửa:
-```python
-# TRƯỚC (sai):
-INFLUX_TOKEN  = "TOKEN_CUA_BAN"
-
-# SAU (đúng — dán token từ bước A2):
-INFLUX_TOKEN  = "SPSuc2iy...9Aw=="
-```
-
-Lưu và thoát: nhấn **`Ctrl + O`** → **Enter** → **`Ctrl + X`**
-
-### A5. Tạo môi trường Python (venv)
-
-```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-bash Phase4_Fusion/setup_venv.sh
-```
-
-✅ Kết quả mong đợi:
-```
-✅ Môi trường Python đã sẵn sàng tại Phase4_Fusion/drone_env
-```
-
-### A6. Nạp firmware lên board BW16
-
-Xem chi tiết tại [`Phase3_BW16/wiring_diagram.md`](Phase3_BW16/wiring_diagram.md).
-
-Tóm tắt nhanh:
-1. Đấu nối DHT22 và MQ-135 theo sơ đồ (lưu ý **voltage divider** cho MQ-135).
-2. Mở **Arduino IDE** → mở file `Phase3_BW16/bw16_sensor.ino`.
-3. Điền WiFi và IP máy tính vào code:
-   ```cpp
-   const char* ssid = "TEN_WIFI";
-   const char* password = "MAT_KHAU";
-   const char* mqtt_server = "192.168.x.x"; // IP máy tính chạy Docker
-   ```
-4. Chọn Board: **`AmebaD (RTL8720DN)` → `BW16`**.
-5. Nạp code: Nhấn **Upload** → Khi IDE đếm ngược → Giữ **BURN** + nhấn **RESET** → Thả **BURN**.
-
----
-
-## PHẦN B: Chạy hệ thống mỗi ngày (Đúng thứ tự!)
-
-> [!TIP]
-> **Dọn dẹp tiến trình cũ trước khi chạy:**
-> Để tránh lỗi xung đột cổng kết nối (như port `5763` bị chiếm dụng bởi tiến trình `fusion.py` chạy ngầm từ phiên làm việc trước khiến dữ liệu GPS hoặc cảm biến bị báo `0`), bạn nên dọn dẹp hệ thống trước khi khởi động phiên làm việc mới bằng cách chạy:
-> ```bash
-> cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-> bash Phase5_Operations/stop_all.sh
-> ```
-
-> 🔴 **QUAN TRỌNG**: Thứ tự khởi động phải là:
-> **Docker → SITL → (chờ MAV>) → Fusion → QGroundControl**
-
-### B1. Đảm bảo Docker Desktop đang chạy
-
-Kiểm tra icon Docker ở thanh menu trên cùng phải đang chạy (màu trắng). Nếu chưa → mở Docker Desktop và chờ.
-
-```bash
-# Kiểm tra 3 container đang chạy
 docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-✅ Phải thấy 3 dòng: `iot_mqtt`, `iot_db`, `iot_grafana` đều là `Up ...`
+Phải thấy `iot_mqtt`, `iot_db`, `iot_grafana` đều ở trạng thái `Up`.
 
-Nếu container chưa chạy:
+### Bước 3 — Cài ArduPilot SITL
+
+> Bước này mất 15–30 phút, đừng đóng Terminal.
+
 ```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS/Phase1_Docker
-docker-compose up -d
+bash Phase2_SITL/install_sitl.sh
 ```
 
-### B2. [TAB 1] Chạy SITL trong Terminal riêng
+Sau khi hoàn tất, đóng Terminal hiện tại và mở Terminal mới để PATH được nạp lại đúng.
 
-> ⚠️ **Mở tab Terminal MỚI** (`Cmd + T`) — KHÔNG dùng chung tab với bước khác!
+### Bước 4 — Tạo Python virtual environment
 
+```bash
+bash Phase4_Fusion/setup_venv.sh
+```
+
+---
+
+## Nạp firmware BW16
+
+### Đấu nối phần cứng
+
+| Cảm biến | Chân cảm biến | Chân BW16 | Ghi chú |
+|---|---|---|---|
+| DHT22 | VCC | 3.3V | |
+| DHT22 | GND | GND | |
+| DHT22 | DATA | PA_26 | Thêm điện trở pull-up 10k ohm giữa VCC và DATA |
+| MQ-135 | VCC | 5V | |
+| MQ-135 | GND | GND | |
+| MQ-135 | AOUT | PB_1 | Bắt buộc qua cầu phân áp 2 x 10k ohm (chip chỉ chịu 3.3V) |
+| LED Đỏ | Anode | PB_3 | Qua điện trở 220 ohm |
+| LED Xanh | Anode | PA_27 | Qua điện trở 220 ohm |
+| Buzzer | + | PA_15 | Active High |
+
+> Không dùng PA_12 (trùng TX Log Console) và PA_30 (chân JTAG gây treo board).
+
+### Cài board package và thư viện
+
+Trong Arduino IDE:
+1. **Boards Manager**: tìm `AmebaD`, cài bản mới nhất.
+2. **Library Manager**: tìm và cài `DHT sensor library` (Adafruit) và `PubSubClient` (Nick O'Leary).
+
+### Cấu hình và upload
+
+1. Mở `Phase3_BW16/bw16_sensor/bw16_sensor.ino`.
+2. Sửa 3 dòng đầu:
+   ```cpp
+   const char* ssid        = "TEN_WIFI_CUA_BAN";
+   const char* password    = "MAT_KHAU_WIFI";
+   const char* mqtt_server = "192.168.x.x"; // IP máy Mac chạy Docker
+   ```
+   Lấy IP máy Mac: `ipconfig getifaddr en0`
+3. Chọn Board: `AmebaD (RTL8720DN) > BW16`, chọn đúng cổng.
+4. Nhấn **Upload**. Khi IDE bắt đầu kết nối board: nhấn giữ **BURN**, nhấn thả **RESET** một lần, rồi thả **BURN**.
+5. Sau khi IDE báo `Upload done`, nhấn **RESET** để board chạy bình thường.
+6. Mở Serial Monitor (115200 baud) — board sẽ in log kết nối WiFi, MQTT, rồi dữ liệu cảm biến mỗi 2 giây.
+
+---
+
+## Khởi động hàng ngày
+
+Dọn tiến trình cũ trước để tránh xung đột cổng:
+
+```bash
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+bash Phase5_Operations/stop_all.sh
+```
+
+### Cách 1 — Tự động (khuyên dùng)
+
+```bash
+bash Phase5_Operations/start_all.sh
+```
+
+Script tự khởi động Docker, chờ SITL sẵn sàng, rồi chạy fusion.py ngầm và in log ra `Phase5_Operations/fusion.log`.
+
+### Cách 2 — Thủ công (từng bước, dùng khi debug)
+
+**Terminal 1 — Docker** (nếu chưa chạy):
+```bash
+cd Phase1_Docker && docker-compose up -d
+```
+
+**Terminal 2 — SITL** (mở tab mới Cmd+T):
 ```bash
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 bash Phase2_SITL/run_sitl.sh
 ```
+Chờ đến khi xuất hiện `MAV>` và `EKF3 IMU0 origin set`. Không đóng tab này.
 
-**Chờ đến khi thấy dòng `MAV>` xuất hiện** (lần đầu mất 1–3 phút build):
-```
-AP: ArduPilot Ready
-AP: EKF3 IMU0 origin set
-...
-MAV>          ← Đây! SITL đã sẵn sàng
-```
-
-> ✅ Sau khi thấy `MAV>` → QGroundControl sẽ **tự động kết nối** qua UDP 14550 và hiện **"Ready to Fly"**.
->
-> ⚠️ **KHÔNG đóng Tab này** trong suốt quá trình dùng hệ thống!
-
-### B3. [TAB 2] Chạy Data Fusion Gateway
-
-Mở **tab Terminal MỚI thứ 2** (`Cmd + T`):
-
+**Terminal 3 — fusion.py** (mở tab mới):
 ```bash
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 source Phase4_Fusion/drone_env/bin/activate
 python3 Phase4_Fusion/fusion.py
 ```
 
-✅ Kết quả mong đợi:
+Log bình thường:
 ```
-[TOKEN] ✅ Token hợp lệ
-[MQTT] ✅ Kết nối thành công broker 127.0.0.1:1883
-[MAVLink] ✅ Kết nối SITL thành công tcp:127.0.0.1:5763
-[Fusion] ✅ Bắt đầu ghi dữ liệu vào InfluxDB...
-[Fusion] GPS: lat=... lon=... alt=...  Temp=28.5°C  AQ=125
+[MQTT] Ket noi thanh cong broker 127.0.0.1:1883
+[SITL] Ket noi thanh cong! System ID=1
+[FUSION] #0001 GPS: (-35.36326, 149.16523, 584.0m) T=28.5C, H=65.0%, CO2=412, Alert=0
 ```
 
-> ⚠️ **KHÔNG đóng Tab này** — đây là cầu nối dữ liệu chính!
+Không đóng tab này trong suốt phiên làm việc.
 
-### B4. Kết nối QGroundControl với SITL
-
-1. Mở **QGroundControl** (nếu chưa mở).
-2. Nếu **không tự kết nối** sau 10 giây → nhấn vào chữ **"Disconnected - Click to manually connect"**.
-3. Cài đặt kết nối thủ công:
-   - **Type**: UDP
-   - **Port**: `14550`
-4. Nhấn **Connect** → QGC sẽ hiện bản đồ với drone và trạng thái **"Ready to Fly"** ✈️
-
-### B5. Xem Dashboard Grafana
-
-Mở trình duyệt → truy cập: **http://localhost:3000**
-
-| Dịch vụ | URL | User | Password |
-|---------|-----|------|----------|
-| Grafana | http://localhost:3000 | `admin` | `admin` |
-| InfluxDB | http://localhost:8086 | `admin` | `adminpassword` |
+**QGroundControl**: Mở lên, sẽ tự kết nối qua UDP 14550 và hiện "Ready to Fly".
 
 ---
 
-### B6. Setup Grafana Dashboard
+## Cấu hình Grafana
 
-> Chỉ làm **1 lần duy nhất** sau khi đã có Data Source InfluxDB.
+Truy cập `http://localhost:3000` — đăng nhập `admin / admin`.
 
-#### B6.1 Kết nối Grafana với InfluxDB
-1. Mở **http://localhost:3000** → Đăng nhập `admin / admin`
-2. **Connections → Data Sources → Add data source → InfluxDB**
-3. Điền thông tin:
+### Kết nối Data Source InfluxDB (làm 1 lần)
+
+Vào **Connections > Data Sources > Add data source > InfluxDB**:
 
 | Trường | Giá trị |
-|--------|---------|
-| **Query Language** | `Flux` |
-| **URL** | `http://influxdb:8086` |
-| **Organization** | `drone_org` |
-| **Token** | *(lấy bằng lệnh bên dưới)* |
-| **Default Bucket** | `drone_data` |
+|---|---|
+| Query Language | `Flux` |
+| URL | `http://influxdb:8086` |
+| Organization | `drone_org` |
+| Bucket | `drone_data` |
+| Token | Chạy: `cat Phase4_Fusion/.influx_token` |
 
-```bash
-# Lấy token từ file (cách nhanh nhất):
-cat ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS/Phase4_Fusion/.influx_token
-```
+Nhấn **Save & Test** — phải thấy `datasource is working`.
 
-4. Nhấn **Save & Test** → Phải thấy ✅ `datasource is working`
+### Tạo Dashboard
 
-#### B6.2 Tạo Dashboard 6 Panels
-**Dashboards → New → New Dashboard → nhấn ô Panel (biểu tượng +)**
+Tạo 6 panel, mỗi panel dùng query template sau (chỉ thay `"temperature"` thành field tương ứng):
 
-Với mỗi panel, làm theo thứ tự:
-1. Phần dưới: chọn Data source = **influxdb** → dán Flux query
-2. Phần trên phải: chọn **All visualizations → Time series**
-3. Đổi tên panel → nhấn **Apply**
-
-| Panel | Tiêu đề | Flux query (`_field == ...`) |
-|-------|---------|------------------------------|
-| 1 | `🌡️ Nhiệt độ (°C)` | `"temperature"` |
-| 2 | `💧 Độ ẩm (%)` | `"humidity"` |
-| 3 | `🌫️ Chất lượng khí CO2` | `"co2"` |
-| 4 | `🛫 Độ cao bay (m)` | `"altitude"` |
-| 5 | `📍 Vĩ độ GPS` | `"latitude"` |
-| 6 | `📶 WiFi RSSI` | `"wifi_rssi"` |
-
-**Template query** (chỉ thay phần `"temperature"` thành field tương ứng):
 ```flux
 from(bucket: "drone_data")
   |> range(start: -10m)
@@ -283,199 +235,102 @@ from(bucket: "drone_data")
   |> filter(fn: (r) => r._field == "temperature")
 ```
 
-Sau khi tạo xong 6 panels → **Save dashboard** → đặt tên `Drone IoT Monitor`
+| Panel | Field |
+|---|---|
+| Nhiet do (C) | `temperature` |
+| Do am (%) | `humidity` |
+| Chat luong khi CO2 | `co2` |
+| Do cao bay (m) | `altitude` |
+| Vi do GPS | `latitude` |
+| WiFi RSSI | `wifi_rssi` |
+
+### Panel bản đồ quỹ đạo (Geomap)
+
+```flux
+from(bucket: "drone_data")
+  |> range(start: -30m)
+  |> filter(fn: (r) => r._measurement == "drone_telemetry")
+  |> filter(fn: (r) => r._field == "latitude" or r._field == "longitude")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+```
+
+Chọn Visualization: **Geomap** > Map Layer > Location Mode: `Coords` > Latitude field: `latitude` > Longitude field: `longitude`.
+
+### Alert CO2
+
+**Alerting > Alert rules > Create rule** — đặt điều kiện `last() > 600` trên field `co2`, Evaluation interval `10s`, Pending period `30s`.
 
 ---
 
-### B7. Test toàn hệ thống với mạch BW16 thực tế
+## Web Control
 
-> ✅ Kịch bản này kiểm chứng toàn bộ luồng truyền dữ liệu từ cảm biến phần cứng qua MQTT, tích hợp với GPS của SITL và hiển thị trực quan.
+Web Control kết nối trực tiếp với Mosquitto qua WebSocket cổng 9001, không cần backend.
 
-#### B7.1 Chuẩn bị mạch cảm biến BW16
-1. Cắm cáp USB kết nối board BW16 (đã nạp firmware) vào máy tính hoặc nguồn điện ngoài.
-2. Đảm bảo board đã kết nối thành công vào WiFi và đèn LED xanh trên board sáng nhấp nháy báo hiệu trạng thái hoạt động tốt.
-3. Mở Serial Monitor trên Arduino IDE để quan sát log gửi gói tin sensors thành công.
+**Mở bằng Firefox** (khuyên dùng — Chrome block WebSocket từ file://):
+```
+File > Open File > Phase5_Operations/web_control/index.html
+```
 
-#### B7.2 Khởi động Drone ảo (SITL)
+Hoặc dùng Chrome qua HTTP server:
 ```bash
-# Tab Terminal SITL (Cmd+T để mở tab mới)
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-bash Phase2_SITL/run_sitl.sh
-```
-Chờ đến khi thấy:
-```
-AP: EKF3 IMU0 origin set   ← GPS đã fix (khoảng 30-60 giây)
-MAV>                        ← Sẵn sàng hoàn toàn
+cd Phase5_Operations/web_control
+python3 -m http.server 8080
+# Mở: http://localhost:8080
 ```
 
-#### B7.3 Khởi chạy Data Fusion Gateway
+Badge góc trên phải hiện **"Da ket noi"** xanh = OK.
+
+Chức năng:
+- **ARM / TAKEOFF / LAND / RTL**: Gửi lệnh bay tới SITL qua fusion.py
+- **BAT COI / TAT COI**: Điều khiển buzzer trực tiếp trên BW16
+- **BAT LED / TAT LED**: Điều khiển LED trên BW16
+- **Khoi phuc tu dong**: Trả quyền điều khiển còi/LED về logic cảm biến tự động
+
+---
+
+## Kiểm thử tự động
+
 ```bash
-# Tab Terminal mới
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 source Phase4_Fusion/drone_env/bin/activate
-python3 Phase4_Fusion/fusion.py
+
+# 1. Tinh lien tuc du lieu (gap > 3s phai duoi 5%)
+python3 Phase5_Operations/tests/test_continuity.py
+
+# 2. Do tre MQTT den InfluxDB (yeu cau < 2000ms)
+python3 Phase5_Operations/tests/test_latency.py
+
+# 3. Stress test MQTT + kha nang chiu loi
+python3 Phase5_Operations/tests/test_fault_tolerance.py
+
+# 4. Luong dieu khien Web Control
+python3 Phase5_Operations/tests/test_web_control.py
 ```
 
-✅ Kết quả thành công trông như sau (các chỉ số nhiệt độ `T` và cảm biến `CO2` hiển thị giá trị thực tế đo từ mạch thay vì số 0):
-```
-[TOKEN] ✅ Token hợp lệ (length=88)
-[INFLUX] ✅ Kết nối OK — version=2.0.9
-[MQTT] ✅ Kết nối thành công broker 127.0.0.1:1883
-[SITL] ✅ Kết nối thành công! System ID=0
-🚀 Bắt đầu Fusion Loop
-
-[FUSION] ✅ #0001  GPS: (-35.3632, 149.1652, 584.0m)  T=28.5°C  CO2=412
-[FUSION] ✅ #0002  GPS: (-35.3632, 149.1652, 584.0m)  T=28.4°C  CO2=415
-```
-
-#### B7.4 Kiểm tra trên Grafana và kiểm thử cảnh báo
-1. Mở **http://localhost:3000 $\rightarrow$ Dashboards $\rightarrow$ Drone IoT Monitor**.
-2. Đổi time range sang **"Last 5 minutes"**, bật Auto refresh **5s**.
-3. Các biểu đồ Nhiệt độ, Độ ẩm, CO2 sẽ vẽ các đường line dao động thực tế theo các giá trị gửi về từ cảm biến vật lý.
-4. **Kiểm tra tính năng cảnh báo (Alert test):**
-   - Thổi hơi nóng hoặc đưa khí gas (từ bật lửa) lại gần cảm biến MQ-135 để tăng trị số CO2.
-   - Khi CO2 vượt ngưỡng 600, còi buzzer trên mạch sẽ kêu Beep Beep ngắt quãng và đèn LED đỏ sáng.
-   - Trên Grafana và Web Control, mức độ cảnh báo sẽ chuyển sang **NGUY HIỂM** màu đỏ nổi bật.
+Kết quả ghi vào `Phase5_Operations/test_report.txt`.
 
 ---
 
-## PHẦN C: Dừng hệ thống
-
+## Dừng hệ thống
 
 ```bash
 cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 bash Phase5_Operations/stop_all.sh
 ```
 
-Hoặc thủ công:
-1. Nhấn `Ctrl + C` ở Tab fusion.py
-2. Nhấn `Ctrl + C` ở Tab SITL
-3. `docker-compose -f Phase1_Docker/docker-compose.yml down`
+Hoặc thủ công: Ctrl+C ở tab fusion.py > Ctrl+C ở tab SITL > `docker-compose -f Phase1_Docker/docker-compose.yml down`.
 
 ---
 
-## 🐛 Xử lý lỗi thường gặp
+## Xử lý sự cố
 
-| Lỗi | Nguyên nhân | Fix |
-|-----|-------------|-----|
-| QGroundControl hiện "Disconnected" | SITL chưa chạy hoặc chưa tới `MAV>` | Chờ thêm hoặc kết nối thủ công UDP 14550 |
-| `PORT 5763 chưa mở` | SITL chưa hoàn tất khởi động | Mở tab riêng chạy `run_sitl.sh` trước |
-| `iot_db already in use` | Container cũ còn tồn tại | `docker rm -f iot_db iot_mqtt iot_grafana` |
-| `TOKEN_CUA_BAN chưa set` | Chưa dán token vào fusion.py | Xem lại bước A4 |
-| `No such file or directory` (setup.sh) | Đang đứng sai thư mục | `cd DroneIoT_macOS` trước khi chạy |
-| fusion.py không nhận data BW16 | BW16 chưa kết nối WiFi | Kiểm tra Serial Monitor (115200 baud) |
-
----
-
-## Bugs đã fix so với tài liệu gốc
-
-| # | Bug | File | Fix |
-|---|-----|------|-----|
-| 1 | `on_connect` 4-arg → DeprecationWarning | `fusion.py` | `CallbackAPIVersion.VERSION2` + 5-arg |
-| 2 | MAVLink crash khi SITL chậm | `fusion.py` | Timeout + exponential backoff retry |
-| 3 | TOKEN hardcode gây crash âm thầm | `fusion.py` | Kiểm tra token + load từ file/.env |
-| 4 | Container không tự restart | `docker-compose.yml` | `restart: unless-stopped` |
-| 5 | Data mất khi restart Docker | `docker-compose.yml` | Named volumes |
-| 6 | Mosquitto thiếu log config | `mosquitto.conf` | `log_type all` + `persistence false` |
-| 7 | BW16 mất WiFi → treo vĩnh viễn | `bw16_sensor.ino` | Reconnect loop |
-| 8 | MQ-135 ADC không cảnh báo điện áp | `bw16_sensor.ino` | Voltage divider requirement |
-| 9 | PATH không reload sau install | `install_sitl.sh` | `source ~/.zshrc` + `source ~/.zprofile` |
-| 11 | MAVLink disconnect giữa chừng | `fusion.py` | `ConnectionResetError` catch + reconnect |
-| 12 | TOKEN sai không có error rõ | `fusion.py` | `load_token()` với hướng dẫn chi tiết |
-
----
-
-## PHẦN D: Web Control & Kiểm thử tích hợp (GĐ 6 - GĐ 10)
-
-### D1. Giao diện Web Control (index.html)
-Trang Web Control giao tiếp trực tiếp với Mosquitto Broker qua giao thức MQTT over WebSockets trên cổng `9001` (không cần server backend).
-1. Khởi động Docker, SITL và `fusion.py`.
-2. Mở file `Phase5_Operations/web_control/index.html` trong trình duyệt (Chrome, Safari, Firefox).
-3. Đảm bảo trạng thái badge ở góc trên bên phải báo **"Đã kết nối"** (màu xanh lá).
-4. Các chức năng trên giao diện:
-   - **Bay (MAVLink SITL)**: Bấm `ARM` để khởi động động cơ, `TAKEOFF 10m` để cất cánh, `LAND` để hạ cánh, `RTL` để quay về điểm xuất phát.
-   - **Cảnh báo (BW16)**: Bấm `BẬT CÒI` / `TẮT CÒI` để điều khiển trực tiếp còi báo động trên board BW16. Bấm `Khôi Phục Tự Động Onboard` để trả quyền điều khiển về logic tự động của cảm biến.
-   - **Dữ liệu live & Log**: Hiển thị live Nhiệt độ, Độ ẩm, CO2 từ BW16 và RSSI. Hộp log lưu trữ lịch sử 20 lệnh gần nhất.
-
-### D2. Chạy các kịch bản kiểm thử tích hợp (Integration Tests)
-Hệ thống đi kèm với 4 kịch bản kiểm thử tự động viết bằng Python nằm trong thư mục `Phase5_Operations/tests/`:
-
-Để chạy kiểm thử, đảm bảo đã kích hoạt môi trường ảo Python:
-```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
-source Phase4_Fusion/drone_env/bin/activate
-```
-
-Sau đó chạy từng test:
-1. **Kiểm tra tính liên tục dữ liệu**:
-   ```bash
-   python3 Phase5_Operations/tests/test_continuity.py
-   ```
-   *Mô tả*: Truy vấn InfluxDB trong 5 phút qua và kiểm tra khoảng cách thời gian giữa các điểm dữ liệu liên tiếp. Pass nếu số gap > 3s chiếm < 5%.
-2. **Đo độ trễ đầu cuối (Latency)**:
-   ```bash
-   python3 Phase5_Operations/tests/test_latency.py
-   ```
-   *Mô tả*: Đo thời gian thực từ lúc nhận dữ liệu cảm biến qua MQTT đến khi dữ liệu được ghi thành công vào InfluxDB (lấy mẫu 20 lần). Pass nếu độ trễ tối đa < 2 giây.
-3. **Kiểm tra khả năng chịu lỗi (Fault Tolerance)**:
-   ```bash
-   python3 Phase5_Operations/tests/test_fault_tolerance.py
-   ```
-   *Mô tả*: Mô phỏng kiểm tra trạng thái mất kết nối SITL, stress test MQTT (100 msgs/s) và khôi phục DB. Kết quả ghi vào file `test_report.txt`.
-4. **Kiểm tra Web Control**:
-   ```bash
-   python3 Phase5_Operations/tests/test_web_control.py
-   ```
-   *Mô tả*: Thực hiện gửi nhận tin nhắn lệnh bay/còi giả lập trên MQTT và hiển thị hướng dẫn xác nhận thủ công.
-
----
-
-## PHẦN E: Cấu hình Grafana Nâng cao (Bản đồ Geomap & Alert)
-
-### E1. Vẽ bản đồ quỹ đạo (Geomap Panel)
-1. Thêm Panel mới trong Grafana Dashboard.
-2. Chọn Visualization: **Geomap** (hoặc cài đặt plugin `TrackMap` từ Grafana Store).
-3. Dán câu truy vấn Flux sau để gộp tọa độ lat/lon theo cùng timestamp:
-   ```flux
-   from(bucket: "drone_data")
-     |> range(start: -30m)
-     |> filter(fn: (r) => r._measurement == "drone_telemetry")
-     |> filter(fn: (r) => r._field == "latitude" or r._field == "longitude")
-     |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-   ```
-4. Tại phần cấu hình Map Layer (bên phải):
-   - **Location Mode**: chọn `Coords`
-   - **Latitude field**: chọn `latitude`
-   - **Longitude field**: chọn `longitude`
-5. Nhấn **Apply** → Bản đồ sẽ vẽ trace di chuyển thực tế của drone.
-
-### E2. Cấu hình Alert cảnh báo khí độc CO2
-1. Vào **Alerting → Alert rules → Create rule**.
-2. Đặt tên rule: `Drone CO2 Warning`.
-3. Nhập câu truy vấn Flux lấy CO2:
-   ```flux
-   from(bucket: "drone_data")
-     |> range(start: -1m)
-     |> filter(fn: (r) => r._measurement == "drone_telemetry")
-     |> filter(fn: (r) => r._field == "co2")
-     |> last()
-   ```
-4. Đặt điều kiện cảnh báo: **Define query and alert condition** -> chọn **Evaluate** -> nếu giá trị cuối cùng `last() > 600`.
-5. Đặt tần suất đánh giá (Evaluation interval): `10s`, thời gian chờ kích hoạt (Pending period): `30s`.
-6. Tại mục **Contact points**: Cấu hình ghi cảnh báo ra log Grafana hoặc các kênh Email/Slack mong muốn.
-
----
-
-## PHẦN F: Tài liệu tham chiếu
-*   **Báo cáo kỹ thuật học thuật chi tiết**: Xem tại [academic_report.md](Phase5_Operations/academic_report.md)
-*   **Sơ đồ nối dây thực tế**: Xem tại [wiring_diagram.md](Phase3_BW16/wiring_diagram.md)
-
----
-
-## Yêu cầu phần cứng
-
-- Mac chip M1/M2/M3/M4 (Apple Silicon), RAM ≥ 8GB
-- Docker Desktop for Mac (Apple Silicon build)
-- Board BW16 (RTL8720DN) + cáp USB có dây data
-- Cảm biến DHT22 + điện trở pull-up 10kΩ
-- Cảm biến MQ-135 + còi cắm qua Transistor NPN 2N2222
+| Triệu chứng | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| Board treo sau khi in banner, không in thêm gì | Chân GPIO xung đột | Không dùng PA_12, PA_30 |
+| MQTT thất bại `rc=-2` | Sai IP broker | Chạy `ipconfig getifaddr en0`, cập nhật `mqtt_server` trong code |
+| fusion.py in GPS (0.00, 0.00) | SITL chưa chạy hoặc port 5763 bị chiếm | Chạy stop_all.sh rồi khởi động lại SITL |
+| Nhiet do / do am hien thi 0 | DHT22 chua cam hoac sai chan | Cam DHT22 vao PA_26, xem Serial Monitor |
+| Web badge "Ket noi loi" | Mosquitto chua chay hoac dung Chrome voi file:// | Kiem tra `docker ps`, doi sang Firefox |
+| TAKEOFF that bai | Pre-arm check chua pass | Cho QGroundControl hien "Ready to Fly" truoc |
+| `iot_db already in use` | Container cu con ton tai | `docker rm -f iot_db iot_mqtt iot_grafana` |
+| `No such file or directory` | Dang dung sai thu muc | `cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS` truoc khi chay |
