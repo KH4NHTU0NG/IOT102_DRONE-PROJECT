@@ -430,6 +430,23 @@
                 </button>
             </div>
         </div>
+        <!-- Cấu hình kết nối MQTT -->
+        <div class="card">
+            <h2>Cấu Hình Kết Nối MQTT</h2>
+            <div class="telemetry-row" style="gap: 0.75rem;">
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    <label class="telemetry-label" style="font-size: 0.85rem;">Broker IP / Host</label>
+                    <input type="text" id="mqtt_host" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    <label class="telemetry-label" style="font-size: 0.85rem;">Cổng WebSocket</label>
+                    <input type="number" id="mqtt_port" value="9001" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
+                </div>
+                <button id="btn_connect" class="btn btn-blue" onclick="toggleConnection()" style="margin-top: 0.5rem; width: 100%;">
+                    Kết Nối
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Log Console -->
@@ -448,40 +465,81 @@
 </div>
 
 <script type="text/javascript">
-    // Fix W-001: window.location.hostname trả về cỗi rỗng khi mở file:///
-    // Dùng '127.0.0.1' thay vì 'localhost' — Paho MQTT chấp nhận IP tốt hơn hostname
-    const brokerHost = window.location.hostname || '127.0.0.1';
-    const brokerPort = 9001;
-    const clientId = 'web_client_' + Math.random().toString(16).substr(2, 8);
-
-    const client = new Paho.MQTT.Client(brokerHost, brokerPort, clientId);
-    
     // Các topic điều khiển
     const TOPIC_SENSORS = "drone/payload/sensors";
     const TOPIC_FLIGHT  = "drone/control/flight";
     const TOPIC_PAYLOAD = "drone/control/payload";
 
     const logConsole = document.getElementById('log_console');
+    const hostInput = document.getElementById('mqtt_host');
+    const portInput = document.getElementById('mqtt_port');
+    const btnConnect = document.getElementById('btn_connect');
 
-    // Thiết lập các hàm callback
-    client.onConnectionLost = onConnectionLost;
-    client.onMessageArrived = onMessageArrived;
+    // Thiết lập giá trị mặc định cho UI
+    hostInput.value = window.location.hostname || '127.0.0.1';
+    
+    let client = null;
+    let isConnected = false;
 
     // Bắt đầu kết nối
-    addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ws://${brokerHost}:${brokerPort}...`);
-    client.connect({
-        onSuccess: onConnect,
-        onFailure: onFailure,
-        keepAliveInterval: 60,
-        useSSL: false,
-        reconnect: true
-    });
+    function startConnection() {
+        const host = hostInput.value.trim() || '127.0.0.1';
+        const port = Number(portInput.value) || 9001;
+        const clientId = 'web_client_' + Math.random().toString(16).slice(2, 10);
+
+        addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ws://${host}:${port}/mqtt...`);
+        
+        try {
+            client = new Paho.MQTT.Client(host, port, "/mqtt", clientId);
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            client.connect({
+                onSuccess: onConnect,
+                onFailure: onFailure,
+                keepAliveInterval: 60,
+                useSSL: false,
+                reconnect: false // Không dùng tự động reconnect của Paho để tránh lỗi không đồng bộ UI
+            });
+        } catch (e) {
+            addLog("[SYSTEM] Lỗi khởi tạo client: " + e.message);
+            updateUIConnected(false);
+        }
+    }
+
+    function toggleConnection() {
+        if (client && isConnected) {
+            addLog("[SYSTEM] Đang ngắt kết nối chủ động...");
+            try {
+                client.disconnect();
+            } catch (e) {}
+            updateUIConnected(false);
+        } else {
+            startConnection();
+        }
+    }
+
+    function updateUIConnected(connected) {
+        isConnected = connected;
+        const badge = document.getElementById('status_badge');
+        const statusText = document.getElementById('status_text');
+        
+        if (connected) {
+            badge.className = "status-badge connected";
+            statusText.innerText = "Đã kết nối";
+            btnConnect.innerText = "Ngắt Kết Nối";
+            btnConnect.className = "btn btn-red";
+        } else {
+            badge.className = "status-badge disconnected";
+            statusText.innerText = "Mất kết nối";
+            btnConnect.innerText = "Kết Nối";
+            btnConnect.className = "btn btn-blue";
+        }
+    }
 
     // Kết nối thành công
     function onConnect() {
-        const badge = document.getElementById('status_badge');
-        badge.className = "status-badge connected";
-        document.getElementById('status_text').innerText = "Đã kết nối";
+        updateUIConnected(true);
         addLog("[MQTT] ✅ Kết nối WebSocket thành công!");
 
         // Subscribe các topics cần thiết
@@ -493,19 +551,20 @@
 
     // Kết nối thất bại
     function onFailure(message) {
-        const badge = document.getElementById('status_badge');
-        badge.className = "status-badge disconnected";
-        document.getElementById('status_text').innerText = "Kết nối lỗi";
+        updateUIConnected(false);
         addLog("[MQTT] ❌ Kết nối thất bại: " + message.errorMessage);
     }
 
     // Mất kết nối
     function onConnectionLost(responseObject) {
-        const badge = document.getElementById('status_badge');
-        badge.className = "status-badge disconnected";
-        document.getElementById('status_text').innerText = "Mất kết nối";
-        addLog("[MQTT] ⚠️  Mất kết nối WebSocket. Chi tiết: " + responseObject.errorMessage);
+        updateUIConnected(false);
+        if (responseObject.errorCode !== 0) {
+            addLog("[MQTT] ⚠️  Mất kết nối WebSocket. Chi tiết: " + responseObject.errorMessage);
+        }
     }
+
+    // Tự động kết nối khi tải trang lần đầu
+    startConnection();
 
     // Nhận được tin nhắn từ broker
     function onMessageArrived(message) {
