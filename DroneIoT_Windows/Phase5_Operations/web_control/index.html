@@ -448,8 +448,9 @@
 </div>
 
 <script type="text/javascript">
-    // Cấu hình Client kết nối MQTT WebSocket
-    const brokerHost = window.location.hostname || 'localhost';
+    // Fix W-001: window.location.hostname trả về cỗi rỗng khi mở file:///
+    // Dùng '127.0.0.1' thay vì 'localhost' — Paho MQTT chấp nhận IP tốt hơn hostname
+    const brokerHost = window.location.hostname || '127.0.0.1';
     const brokerPort = 9001;
     const clientId = 'web_client_' + Math.random().toString(16).substr(2, 8);
 
@@ -483,6 +484,7 @@
         document.getElementById('status_text').innerText = "Đã kết nối";
         addLog("[MQTT] ✅ Kết nối WebSocket thành công!");
 
+        // Subscribe các topics cần thiết
         client.subscribe(TOPIC_SENSORS);
         client.subscribe(TOPIC_FLIGHT);
         client.subscribe(TOPIC_PAYLOAD);
@@ -510,18 +512,26 @@
         const topic = message.destinationName;
         const payload = message.payloadString;
 
+        // Nếu là topic dữ liệu cảm biến
         if (topic === TOPIC_SENSORS) {
             try {
                 const data = JSON.parse(payload);
-                
-                document.getElementById('temp_value').innerHTML = `${data.temp.toFixed(1)}<span>°C</span>`;
-                document.getElementById('hum_value').innerHTML = `${data.humidity.toFixed(1)}<span>%</span>`;
-                document.getElementById('co2_value').innerHTML = `${data.co2}<span>ADC</span>`;
-                
+
+                // Fix W-002: Null-safe access — BW16 có thể gửi thiếu field
+                const temp = (data.temp != null) ? Number(data.temp).toFixed(1) : '--';
+                const hum  = (data.humidity != null) ? Number(data.humidity).toFixed(1) : '--';
+                const co2  = (data.co2 != null) ? data.co2 : '--';
+
+                document.getElementById('temp_value').innerHTML = `${temp}<span>°C</span>`;
+                document.getElementById('hum_value').innerHTML  = `${hum}<span>%</span>`;
+                document.getElementById('co2_value').innerHTML  = `${co2}<span>ADC</span>`;
+
                 const alertEl = document.getElementById('alert_value');
                 if (data.alert === 1) {
                     alertEl.innerText = "NGUY HIỂM (CO2 > 600)";
                     alertEl.className = "telemetry-val alert-active";
+                    alertEl.style.color = "";
+                    alertEl.style.textShadow = "";
                 } else {
                     alertEl.innerText = "AN TOÀN";
                     alertEl.className = "telemetry-val";
@@ -529,7 +539,7 @@
                     alertEl.style.textShadow = "none";
                 }
 
-                if (data.rssi !== undefined) {
+                if (data.rssi != null) {
                     document.getElementById('rssi_value').innerHTML = `${data.rssi}<span>dBm</span>`;
                 }
 
@@ -537,10 +547,12 @@
                 addLog(`[ERROR] Lỗi parse JSON từ ${topic}: ${payload}`);
             }
         } else {
+            // Hiển thị tin nhắn từ các topic điều khiển
             addLog(`[SUB] Topic [${topic}]: ${payload}`);
         }
     }
 
+    // Gửi lệnh điều khiển bay sang Gateway (fusion.py)
     function sendFlightCommand(cmdName) {
         const payload = {
             command: cmdName,
@@ -553,6 +565,7 @@
         addLog(`[PUB] Gửi lệnh bay: ${cmdName} -> ${TOPIC_FLIGHT}`);
     }
 
+    // Gửi lệnh điều khiển còi/LED sang BW16
     function sendPayloadCommand(cmdName) {
         const payload = {
             command: cmdName,
@@ -564,17 +577,18 @@
         addLog(`[PUB] Gửi lệnh payload: ${cmdName} -> ${TOPIC_PAYLOAD}`);
     }
 
+    // Fix W-004: Dùng slice O(1) thay vì shift() O(n) cho mỗi dòng log
     function addLog(msg) {
         const d = new Date();
         const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-        
+
         logConsole.value += `[${timeStr}] ${msg}\n`;
         logConsole.scrollTop = logConsole.scrollHeight;
 
+        // Giới hạn 200 dòng — dùng slice thay shift để tránh O(n) mỗi ký tự
         const lines = logConsole.value.split('\n');
-        if (lines.length > 200) {
-            lines.shift();
-            logConsole.value = lines.join('\n');
+        if (lines.length > 202) {
+            logConsole.value = lines.slice(lines.length - 200).join('\n');
         }
     }
 

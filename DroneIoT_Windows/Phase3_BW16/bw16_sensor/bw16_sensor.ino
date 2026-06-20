@@ -12,25 +12,28 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 
-const char* ssid        = "TuongHuy";          // Tên WiFi của bạn
-const char* password    = "kminh1983";     // Mật khẩu WiFi
-const char* mqtt_server = "192.168.1.120";     // IP máy tính chạy Broker
+// ── Cấu hình kết nối ─────────────────────────────────────
+// !! Sửa SSID và PASSWORD thành WiFi của bạn !!
+const char* ssid        = "TuongHuy";       // Tên WiFi (phân biệt hoa thường)
+const char* password    = "kminh1983";      // Mật khẩu WiFi
+const char* mqtt_server = "192.168.1.120";  // IP máy Mac chạy Mosquitto broker
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
+// QUAN TRỌNG: Không dùng PA_12 (TX Log Console), PA_30 (JTAG), PA_28 (SWD)
 #define DHT_PIN    PA_26   // Chân DATA của DHT22
 #define DHT_TYPE   DHT22
 #define MQ135_PIN  PB_1    // Chân AOUT của MQ-135 (ADC)
 
-// Định nghĩa chân còi và LED thực tế trên board (tránh chân PA_12 trùng TX Log Console)
+// Fix F-001: Đổi LED_PIN từ PA_30 (JTAG — gây treo board) sang PB_3
 #define BUZZER_PIN    PA_15  // Còi Buzzer (Active High)
-#define LED_PIN       PA_30  // LED Đỏ (Cảnh báo / LED_ON)
-#define LED_GREEN_PIN PA_27  // LED Xanh (An toàn / LED_OFF)
+#define LED_PIN       PB_3   // LED Đỏ (Cảnh báo) — đã đổi từ PA_30 sang PB_3
+#define LED_GREEN_PIN PA_27  // LED Xanh (An toàn)
 
 // Ngưỡng cảnh báo khí CO2 tự động (thang đo ADC 12-bit thô 0-4095)
 const int CO2_THRESHOLD = 600;
 
-// Các trạng thái ghi đè từ MQTT (Quyền ưu tiên cao nhất)
+// Trạng thái ghi đè từ MQTT (Quyền ưu tiên cao nhất)
 bool mqtt_buzzer_override = false;
 bool mqtt_buzzer_state    = false;
 bool mqtt_led_override    = false;
@@ -42,10 +45,11 @@ PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT_TYPE);
 
 unsigned long lastMsg = 0;
-const long    interval = 2000;   // Gửi dữ liệu mỗi 2 giây (không chặn)
+const long    interval = 2000;   // Gửi dữ liệu mỗi 2 giây
 
-// ── Hàm trích xuất giá trị JSON đơn giản không dùng thư viện ngoài ──
-String parseJsonField(String json, String key) {
+// ── Hàm trích xuất giá trị JSON đơn giản ────────────────
+// Fix F-005: Dùng String thay vì VLA để an toàn trên mọi compiler
+String parseJsonField(const String& json, const String& key) {
     int keyIndex = json.indexOf("\"" + key + "\"");
     if (keyIndex == -1) return "";
     int colonIndex = json.indexOf(":", keyIndex);
@@ -53,72 +57,70 @@ String parseJsonField(String json, String key) {
     int startIndex = json.indexOf("\"", colonIndex);
     int endIndex;
     if (startIndex == -1 || startIndex > json.indexOf(",", colonIndex)) {
-        // Giá trị số hoặc boolean (không có dấu ngoặc kép)
         int commaIndex = json.indexOf(",", colonIndex);
         int braceIndex = json.indexOf("}", colonIndex);
         if (commaIndex == -1) endIndex = braceIndex;
         else if (braceIndex == -1) endIndex = commaIndex;
         else endIndex = min(commaIndex, braceIndex);
-        
         String val = json.substring(colonIndex + 1, endIndex);
         val.trim();
         return val;
     } else {
-        // Giá trị chuỗi (nằm trong dấu ngoặc kép)
         endIndex = json.indexOf("\"", startIndex + 1);
         if (endIndex == -1) return "";
         return json.substring(startIndex + 1, endIndex);
     }
 }
 
-// ── Hàm Callback nhận lệnh MQTT ─────────────────────────────
+// ── Hàm Callback nhận lệnh MQTT ─────────────────────────
+// Fix F-005: Dùng String thay VLA char message[length+1]
 void callback(char* topic, byte* payload, unsigned int length) {
-    char message[length + 1];
-    memcpy(message, payload, length);
-    message[length] = '\0';
+    String msgString = "";
+    for (unsigned int i = 0; i < length; i++) {
+        msgString += (char)payload[i];
+    }
 
-    Serial.print("[MQTT] Nhận lệnh từ topic [");
+    Serial.print("[MQTT] Nhan lenh tu topic [");
     Serial.print(topic);
     Serial.print("]: ");
-    Serial.println(message);
+    Serial.println(msgString);
 
-    String msgString = String(message);
     String command = parseJsonField(msgString, "command");
 
     if (command == "BUZZER_ON") {
         mqtt_buzzer_override = true;
         mqtt_buzzer_state    = true;
         digitalWrite(BUZZER_PIN, HIGH);
-        Serial.println("[CONTROL] MQTT override: BẬT CÒI");
+        Serial.println("[CONTROL] MQTT override: BAT COI");
     } else if (command == "BUZZER_OFF") {
         mqtt_buzzer_override = true;
         mqtt_buzzer_state    = false;
         digitalWrite(BUZZER_PIN, LOW);
-        Serial.println("[CONTROL] MQTT override: TẮT CÒI");
+        Serial.println("[CONTROL] MQTT override: TAT COI");
     } else if (command == "LED_ON") {
         mqtt_led_override = true;
         mqtt_led_state    = true;
         digitalWrite(LED_PIN, HIGH);
         digitalWrite(LED_GREEN_PIN, LOW);
-        Serial.println("[CONTROL] MQTT override: BẬT LED ĐỎ (Cảnh báo)");
+        Serial.println("[CONTROL] MQTT override: BAT LED DO");
     } else if (command == "LED_OFF") {
         mqtt_led_override = true;
         mqtt_led_state    = false;
         digitalWrite(LED_PIN, LOW);
         digitalWrite(LED_GREEN_PIN, HIGH);
-        Serial.println("[CONTROL] MQTT override: BẬT LED XANH (An toàn)");
+        Serial.println("[CONTROL] MQTT override: BAT LED XANH");
     } else if (command == "RESET") {
         mqtt_buzzer_override = false;
         mqtt_led_override    = false;
-        Serial.println("[CONTROL] Khôi phục chế độ tự động");
+        Serial.println("[CONTROL] Khoi phuc che do tu dong");
     }
 }
 
-// ── Kết nối WiFi (có tự động reconnect) ───────────────────────
+// ── Kết nối WiFi ──────────────────────────────────────────
 void connectWiFi() {
     if (WiFi.status() == WL_CONNECTED) return;
 
-    Serial.print("[WiFi] Đang kết nối tới: ");
+    Serial.print("[WiFi] Dang ket noi toi: ");
     Serial.println(ssid);
     WiFi.begin(const_cast<char*>(ssid), const_cast<char*>(password));
 
@@ -131,29 +133,28 @@ void connectWiFi() {
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println();
-        Serial.print("[WiFi] Kết nối thành công! IP: ");
+        Serial.print("[WiFi] Ket noi thanh cong! IP: ");
         Serial.println(WiFi.localIP());
     } else {
         Serial.println();
-        Serial.println("[WiFi] Thất bại sau 30 lần thử. Sẽ thử lại sau...");
+        Serial.println("[WiFi] That bai sau 30 lan thu. Se thu lai sau...");
     }
 }
 
-// ── Kết nối MQTT (có tự động reconnect) ───────────────────────
+// ── Kết nối MQTT ─────────────────────────────────────────
 void connectMQTT() {
     int retry = 0;
     while (!client.connected() && retry < 5) {
-        Serial.print("[MQTT] Đang kết nối broker...");
+        Serial.print("[MQTT] Dang ket noi broker...");
 
         if (client.connect("BW16_Payload")) {
             Serial.println(" OK!");
-            // Đăng ký topic nhận lệnh điều khiển còi/LED từ Web/Gateway
-            client.subscribe("drone/control/payload"); 
-            Serial.println("[MQTT] Đã subscribe topic: drone/control/payload");
+            client.subscribe("drone/control/payload");
+            Serial.println("[MQTT] Da subscribe: drone/control/payload");
         } else {
-            Serial.print(" Thất bại, rc=");
+            Serial.print(" That bai, rc=");
             Serial.print(client.state());
-            Serial.println(" — Thử lại sau 3s...");
+            Serial.println(" - Thu lai sau 3s...");
             delay(3000);
         }
         retry++;
@@ -168,58 +169,34 @@ void setup() {
     Serial.println("==============================");
     Serial.println("  BW16 Drone IoT Payload");
     Serial.println("  DHT22 + MQ-135 + alert Node");
+    Serial.println("  v2.0 - Fixed PA_30->PB_3");
     Serial.println("==============================");
 
-    // [DEBUG 1] Kiểm tra GPIO — từng bước
-    Serial.println("[D1.1] pinMode LED_PIN (PA_30)...");
-    delay(100);
-    pinMode(LED_PIN, OUTPUT);
-    Serial.println("[D1.1] OK");
-
-    Serial.println("[D1.2] pinMode LED_GREEN_PIN (PA_27)...");
-    delay(100);
-    pinMode(LED_GREEN_PIN, OUTPUT);
-    Serial.println("[D1.2] OK");
-
-    Serial.println("[D1.3] pinMode BUZZER_PIN (PA_15)...");
-    delay(100);
+    // Cấu hình GPIO (Fix F-001: LED_PIN = PB_3, không còn dùng PA_30)
     pinMode(BUZZER_PIN, OUTPUT);
-    Serial.println("[D1.3] OK");
+    pinMode(LED_PIN, OUTPUT);
+    pinMode(LED_GREEN_PIN, OUTPUT);
 
-    Serial.println("[D1.4] digitalWrite LED_GREEN HIGH...");
-    delay(100);
-    digitalWrite(LED_GREEN_PIN, HIGH);
-    Serial.println("[D1.4] OK");
-
-    Serial.println("[D1.5] digitalWrite LED_PIN LOW...");
-    delay(100);
-    digitalWrite(LED_PIN, LOW);
-    Serial.println("[D1.5] OK");
-
-    Serial.println("[D1.6] digitalWrite BUZZER LOW...");
-    delay(100);
+    // Trạng thái ban đầu: LED Xanh sáng, LED Đỏ tắt, Còi tắt
     digitalWrite(BUZZER_PIN, LOW);
-    Serial.println("[D1.6] OK — GPIO xong!");
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    Serial.println("[INIT] GPIO OK");
 
-    // [DEBUG 2] Khởi tạo DHT22 (an toàn kể cả khi chưa cắm)
-    Serial.println("[DEBUG 2] Khoi tao DHT22...");
+    // Khởi tạo DHT22
     dht.begin();
-    delay(500); // Chờ DHT ổn định
-    Serial.println("[DEBUG 2] DHT22 init xong");
+    delay(500);
+    Serial.println("[INIT] DHT22 init xong");
 
-    // [DEBUG 3] Kết nối WiFi
-    Serial.println("[DEBUG 3] Bat dau ket noi WiFi...");
+    // Kết nối WiFi
     connectWiFi();
-    Serial.println("[DEBUG 3] WiFi done");
 
-    // [DEBUG 4] Cấu hình MQTT
-    Serial.println("[DEBUG 4] Cau hinh MQTT...");
+    // Cấu hình MQTT
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
     client.setKeepAlive(60);
-    Serial.println("[DEBUG 4] MQTT config xong");
 
-    Serial.println("[SYSTEM] Setup hoan tat. Bat dau doc cam bien...");
+    Serial.println("[SYSTEM] Setup hoan tat!");
 }
 
 // ── Loop ──────────────────────────────────────────────────
@@ -233,10 +210,10 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED && !client.connected()) {
         connectMQTT();
     }
-    
+
     client.loop();
 
-    // Đọc cảm biến và gửi dữ liệu không chặn bằng millis()
+    // Đọc cảm biến và gửi dữ liệu (non-blocking dùng millis)
     unsigned long now = millis();
     if (now - lastMsg >= interval) {
         lastMsg = now;
@@ -245,17 +222,14 @@ void loop() {
         float temp = dht.readTemperature();
         float hum  = dht.readHumidity();
 
-        // Kiểm tra lỗi cảm biến DHT22
+        // Fix F-002: Không dùng delay() trong loop — thử 1 lần rồi thôi
+        // Fix F-003: Gán 0.0 khi lỗi (không phải -1.0) để UI hiển thị đúng
+        bool dht_ok = true;
         if (isnan(temp) || isnan(hum)) {
-            // Cảm biến chưa cắm hoặc lỗi — thử đọc lại 1 lần
-            delay(200);
-            temp = dht.readTemperature();
-            hum  = dht.readHumidity();
-        }
-        if (isnan(temp) || isnan(hum)) {
-            Serial.println("[DHT22] Chua cam cam bien hoac loi! Kiem tra chan PA_26.");
-            temp = -1.0; // -1 để phân biệt "chưa cắm" vs "đang bình thường 0 độ"
-            hum  = -1.0;
+            Serial.println("[DHT22] Loi doc cam bien! Kiem tra chan PA_26.");
+            temp   = 0.0;
+            hum    = 0.0;
+            dht_ok = false;
         }
 
         // Đọc MQ-135 (ADC giá trị thô 0-4095)
@@ -268,49 +242,34 @@ void loop() {
         if (mqtt_buzzer_override) {
             digitalWrite(BUZZER_PIN, mqtt_buzzer_state ? HIGH : LOW);
         } else {
-            // Tự động kêu còi khi CO2 vượt ngưỡng
-            if (is_alert) {
-                digitalWrite(BUZZER_PIN, HIGH);
-            } else {
-                digitalWrite(BUZZER_PIN, LOW);
-            }
+            digitalWrite(BUZZER_PIN, is_alert ? HIGH : LOW);
         }
 
         // ── ĐIỀU KHIỂN ĐÈN LED (Ưu tiên MQTT > Tự động) ──
         if (mqtt_led_override) {
-            if (mqtt_led_state) {
-                digitalWrite(LED_PIN, HIGH);
-                digitalWrite(LED_GREEN_PIN, LOW);
-            } else {
-                digitalWrite(LED_PIN, LOW);
-                digitalWrite(LED_GREEN_PIN, HIGH);
-            }
+            digitalWrite(LED_PIN,       mqtt_led_state ? HIGH : LOW);
+            digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LOW  : HIGH);
         } else {
-            // Tự động bật LED đỏ nếu có cảnh báo tự động, ngược lại xanh
-            if (is_alert) {
-                digitalWrite(LED_PIN, HIGH);
-                digitalWrite(LED_GREEN_PIN, LOW);
-            } else {
-                digitalWrite(LED_PIN, LOW);
-                digitalWrite(LED_GREEN_PIN, HIGH);
-            }
+            digitalWrite(LED_PIN,       is_alert ? HIGH : LOW);
+            digitalWrite(LED_GREEN_PIN, is_alert ? LOW  : HIGH);
         }
 
-        // Đóng gói dữ liệu JSON
+        // Đóng gói dữ liệu JSON (có thêm field dht_ok để debug)
         String payload = "{";
         payload += "\"temp\":"     + String(temp, 1);
         payload += ",\"humidity\":" + String(hum, 1);
         payload += ",\"co2\":"     + String(mq_raw);
         payload += ",\"alert\":"   + String(is_alert ? 1 : 0);
         payload += ",\"rssi\":"    + String(WiFi.RSSI());
+        payload += ",\"dht_ok\":"  + String(dht_ok ? 1 : 0);
         payload += "}";
 
         // Publish lên MQTT broker
         if (client.connected() && client.publish("drone/payload/sensors", payload.c_str())) {
-            Serial.print("[SEND] Topic [drone/payload/sensors]: ");
+            Serial.print("[SEND] ");
             Serial.println(payload);
         } else {
-            Serial.println("[SEND] Lỗi! Không thể publish dữ liệu lên MQTT.");
+            Serial.println("[SEND] Loi! Khong the publish len MQTT.");
         }
     }
 }

@@ -38,6 +38,7 @@ SITL_PORT     = 5763  # Cổng MAVProxy chuyển tiếp ra TCP
 gps_data = {}
 sensor_data = {}
 state_lock = threading.Lock()
+master_lock = threading.Lock()  # Fix P-003: lock riêng cho master
 sensor_received = threading.Event()
 
 master = None  # Global MAVLink connection
@@ -88,51 +89,83 @@ def on_message(client, userdata, msg):
             command = data.get("command")
             alt = data.get("alt", 10.0)
             print(f"[CMD] Nhận lệnh bay: {command} (alt={alt}m)")
-            
-            if master is None:
+
+            # Fix P-003: thread-safe read của master
+            with master_lock:
+                m = master
+
+            if m is None:
                 print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua lệnh.")
                 return
-                
+
             if command == "ARM":
-                # Gửi lệnh ARM
-                master.mav.command_long_send(
-                    master.target_system, master.target_component,
+                # Fix P-002: ARM cần dùng force arm (param2=21196) trong SITL
+                m.mav.command_long_send(
+                    m.target_system, m.target_component,
                     mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
-                    1, 0, 0, 0, 0, 0, 0
+                    1, 21196, 0, 0, 0, 0, 0
                 )
-                print("[MAVLINK] Sent ARM command")
+                print("[MAVLINK] Sent ARM command (force)")
+
             elif command == "TAKEOFF":
-                # Đổi mode sang GUIDED, ARM và TAKEOFF
-                master.set_mode('GUIDED')
-                time.sleep(0.2)
-                master.mav.command_long_send(
-                    master.target_system, master.target_component,
+                # Fix P-001: Chờ xác nhận mode GUIDED trước khi ARM
+                print("[MAVLINK] Requesting GUIDED mode...")
+                m.set_mode('GUIDED')
+
+                # Chờ HEARTBEAT xác nhận mode change (tối đa 5s)
+                guided_confirmed = False
+                deadline = time.time() + 5.0
+                while time.time() < deadline:
+                    hb = m.recv_match(type='HEARTBEAT', blocking=True, timeout=1.0)
+                    if hb and hb.custom_mode == 4:  # GUIDED = mode 4 trong ArduCopter
+                        guided_confirmed = True
+                        break
+
+                if not guided_confirmed:
+                    print("[MAVLINK] ⚠️ GUIDED mode không được xác nhận sau 5s. Vẫn tiếp tục...")
+                else:
+                    print("[MAVLINK] ✅ GUIDED mode đã xác nhận")
+
+                # ARM (force arm trong SITL)
+                m.mav.command_long_send(
+                    m.target_system, m.target_component,
                     mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
-                    1, 0, 0, 0, 0, 0, 0
+                    1, 21196, 0, 0, 0, 0, 0
                 )
-                time.sleep(0.2)
-                master.mav.command_long_send(
-                    master.target_system, master.target_component,
+                time.sleep(0.5)  # Chờ ARM ổn định
+
+                # TAKEOFF
+                m.mav.command_long_send(
+                    m.target_system, m.target_component,
                     mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0,
                     0, 0, 0, 0, 0, 0, float(alt)
                 )
                 print(f"[MAVLINK] Sent TAKEOFF command (alt={alt}m)")
+
             elif command == "LAND":
-                master.set_mode('LAND')
-                master.mav.command_long_send(
-                    master.target_system, master.target_component,
+                m.set_mode('LAND')
+                m.mav.command_long_send(
+                    m.target_system, m.target_component,
                     mavutil.mavlink.MAV_CMD_NAV_LAND, 0,
                     0, 0, 0, 0, 0, 0, 0
                 )
                 print("[MAVLINK] Sent LAND command")
+
             elif command == "RTL":
-                master.set_mode('RTL')
-                master.mav.command_long_send(
-                    master.target_system, master.target_component,
+                m.set_mode('RTL')
+                m.mav.command_long_send(
+                    m.target_system, m.target_component,
                     mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0,
                     0, 0, 0, 0, 0, 0, 0
                 )
                 print("[MAVLINK] Sent RTL command")
+
+            elif command == "RESET_FLIGHT":
+                # Fix W-003: Handler cho nút Reset Flight trên web
+                print("[MAVLINK] Resetting to GUIDED mode...")
+                m.set_mode('GUIDED')
+                print("[MAVLINK] Mode reset sang GUIDED thành công")
+
     except Exception as e:
         print(f"[MQTT] Lỗi xử lý tin nhắn: {e}")
 
@@ -176,16 +209,24 @@ def connect_sitl(max_retries: int = 5) -> mavutil.mavfile:
     raise ConnectionError("Không kết nối được SITL")
 
 def mavlink_loop():
+    # Fix P-003: Dùng master_lock khi đọc/ghi master
     global master, gps_data
     while True:
-        if master is None:
+        with master_lock:
+            m = master
+
+        if m is None:
             try:
-                master = connect_sitl(max_retries=1)
+                new_conn = connect_sitl(max_retries=1)
+                with master_lock:
+                    master = new_conn
             except Exception:
                 time.sleep(5)
                 continue
+            continue
+
         try:
-            msg = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1.0)
+            msg = m.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1.0)
             if msg is not None:
                 with state_lock:
                     gps_data = {
@@ -195,7 +236,8 @@ def mavlink_loop():
                     }
         except Exception as e:
             print(f"[MAVLINK] Lỗi đọc gói tin: {e}. Đang reconnect...")
-            master = None
+            with master_lock:
+                master = None
             time.sleep(2)
 
 # ══════════════════════════════════════════════════════════
@@ -245,11 +287,12 @@ def main():
             lon = gps.get("lon", 0.0)
             alt = gps.get("alt", 0.0)
 
-            temp = sensor.get("temp", 0.0)
-            hum = sensor.get("humidity", 0.0)
-            co2 = sensor.get("co2", 0)
+            # Fix P-005: Clip giá trị âm (DHT22 báo lỗi gửi -1.0) về 0 để UI hiển thị đúng
+            temp = max(0.0, float(sensor.get("temp", 0.0)))
+            hum  = max(0.0, float(sensor.get("humidity", 0.0)))
+            co2  = max(0, int(sensor.get("co2", 0)))
             alert = sensor.get("alert", 0)
-            rssi = sensor.get("rssi", 0)
+            rssi  = sensor.get("rssi", 0)
 
             point = (
                 Point("drone_telemetry")

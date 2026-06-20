@@ -79,7 +79,7 @@ def poll_db(co2_val, t_mqtt):
     
     while time.time() - start_poll < timeout:
         val, t_db = query_latest_co2(influx)
-        if val is not None and float(val) == float(co2_val):
+        if val is not None and abs(float(val) - float(co2_val)) < 1.0:  # Fix T-001: tolerance thay == float
             # Detected! Calculate latency
             t_detected = time.time()
             latency = (t_detected - t_mqtt) * 1000.0 # in ms
