@@ -30,10 +30,9 @@ const int   mqtt_port   = 1883;
 #define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
 
 // Cấu hình mức tích cực (Active Level)
-// Đổi thành HIGH nếu còi/đèn sáng khi chân ở mức HIGH
-// Đổi thành LOW nếu còi/đèn sáng khi chân ở mức LOW
-#define BUZZER_ACTIVE   HIGH   // Còi hú ở mức HIGH (Active High) - Đã sửa theo README
-#define LED_ACTIVE      HIGH   // Mặc định Đèn sáng ở mức HIGH (Active High)
+// Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
+#define BUZZER_ACTIVE   LOW    // Đổi lại thành LOW (Còi hú khi chân ở mức 0V)
+#define LED_ACTIVE      LOW    // Đổi lại thành LOW (Đèn sáng khi chân ở mức 0V)
 
 // Phái sinh mức bật tắt
 #define BUZZER_ON       BUZZER_ACTIVE
