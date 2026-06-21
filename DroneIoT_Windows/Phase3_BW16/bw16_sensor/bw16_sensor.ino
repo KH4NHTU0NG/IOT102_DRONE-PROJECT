@@ -31,12 +31,12 @@ const int   mqtt_port   = 1883;
 #define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn) - Cắm thực tế
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
-#define TRIG_PIN        PA14   // Chân phát sóng âm
+#define TRIG_PIN        PB2    // Chân phát sóng âm (Đổi từ PA14 sang PB2)
 #define ECHO_PIN        PA13   // Chân nhận sóng âm
 #define COLLISION_LED_PIN PB1  // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
 
 // Cấu hình Động cơ Servo thả hàng
-#define SERVO_PIN       PB2    // Chân PWM điều khiển góc Servo
+#define SERVO_PIN       PA14   // Chân PWM điều khiển góc Servo (Bắt buộc dùng PA14 vì có HW PWM)
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
