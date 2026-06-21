@@ -7,8 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
-    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" type="text/javascript"></script>
     <style>
         :root {
             --bg-gradient: linear-gradient(135deg, #0a0f1d, #02040a);
@@ -499,11 +498,13 @@
                 onFailure: onFailure,
                 keepAliveInterval: 60,
                 useSSL: false,
-                reconnect: false // Không dùng tự động reconnect của Paho để tránh lỗi không đồng bộ UI
+                mqttVersion: 4, // Bắt buộc dùng MQTT 3.1.1
+                reconnect: false
             });
         } catch (e) {
-            addLog("[SYSTEM] Lỗi khởi tạo client: " + e.message);
+            addLog("[SYSTEM] Lỗi khởi tạo client: " + (e.message || e));
             updateUIConnected(false);
+            alert("Lỗi khởi tạo MQTT: " + (e.message || e));
         }
     }
 
@@ -552,14 +553,18 @@
     // Kết nối thất bại
     function onFailure(message) {
         updateUIConnected(false);
-        addLog("[MQTT] ❌ Kết nối thất bại: " + message.errorMessage);
+        const errMsg = message.errorMessage || "Network Error / Khởi tạo thất bại";
+        addLog("[MQTT] ❌ Kết nối thất bại: " + errMsg);
+        if (errMsg.includes("Network Error")) {
+            addLog("[SYSTEM] Gợi ý: Hãy đảm bảo bạn đang mở qua http://localhost:8080 và Mosquitto Docker đang chạy.");
+        }
     }
 
     // Mất kết nối
     function onConnectionLost(responseObject) {
         updateUIConnected(false);
         if (responseObject.errorCode !== 0) {
-            addLog("[MQTT] ⚠️  Mất kết nối WebSocket. Chi tiết: " + responseObject.errorMessage);
+            addLog("[MQTT] ⚠️  Mất kết nối WebSocket. Chi tiết: " + (responseObject.errorMessage || "Không rõ lỗi"));
         }
     }
 
