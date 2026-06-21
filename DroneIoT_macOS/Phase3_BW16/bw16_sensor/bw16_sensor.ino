@@ -31,8 +31,8 @@ const int   mqtt_port   = 1883;
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
-#define BUZZER_ACTIVE   LOW    // Đổi lại thành LOW (Còi hú khi chân ở mức 0V)
-#define LED_ACTIVE      LOW    // Đổi lại thành LOW (Đèn sáng khi chân ở mức 0V)
+#define BUZZER_ACTIVE   HIGH   // Đổi lại thành HIGH (Còi hú khi nhận 3.3V)
+#define LED_ACTIVE      LOW    // Giữ nguyên LOW cho LED vì LED bị ngược
 
 // Phái sinh mức bật tắt
 #define BUZZER_ON       BUZZER_ACTIVE
