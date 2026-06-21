@@ -489,7 +489,8 @@
         addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ws://${host}:${port}/mqtt...`);
         
         try {
-            client = new Paho.MQTT.Client(host, port, "/mqtt", clientId);
+            const MQTTClient = (typeof Paho.MQTT !== "undefined") ? Paho.MQTT.Client : Paho.Client;
+            client = new MQTTClient(host, port, "/mqtt", clientId);
             client.onConnectionLost = onConnectionLost;
             client.onMessageArrived = onMessageArrived;
 
@@ -623,7 +624,8 @@
             alt: cmdName === "TAKEOFF" ? 10.0 : 0.0,
             timestamp: Date.now()
         };
-        const message = new Paho.MQTT.Message(JSON.stringify(payload));
+        const MQTTMessage = (typeof Paho.MQTT !== "undefined") ? Paho.MQTT.Message : Paho.Message;
+        const message = new MQTTMessage(JSON.stringify(payload));
         message.destinationName = TOPIC_FLIGHT;
         client.send(message);
         addLog(`[PUB] Gửi lệnh bay: ${cmdName} -> ${TOPIC_FLIGHT}`);
@@ -635,7 +637,8 @@
             command: cmdName,
             timestamp: Date.now()
         };
-        const message = new Paho.MQTT.Message(JSON.stringify(payload));
+        const MQTTMessage = (typeof Paho.MQTT !== "undefined") ? Paho.MQTT.Message : Paho.Message;
+        const message = new MQTTMessage(JSON.stringify(payload));
         message.destinationName = TOPIC_PAYLOAD;
         client.send(message);
         addLog(`[PUB] Gửi lệnh payload: ${cmdName} -> ${TOPIC_PAYLOAD}`);
