@@ -20,19 +20,19 @@ const char* mqtt_server = "192.168.1.156";  // IP máy Mac chạy Mosquitto brok
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
-// QUAN TRỌNG: Không dùng PA_12 (TX Log Console), PA_30 (JTAG), PA_28 (SWD)
-#define DHT_PIN         PA_26  // Chân DATA của DHT22
+// QUAN TRỌNG: Không dùng PA12 (TX Log Console), PA30 (JTAG), PA28 (SWD)
+#define DHT_PIN         PA26   // Chân DATA của DHT22
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
-#define MQ135_PIN       PB_3   // Chân đọc ADC (Khí gas) - Đang cắm thực tế ở đây
+#define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas) - Đang cắm thực tế ở đây
 
-#define BUZZER_PIN      PA_15  // Chân điều khiển Còi Buzzer
-#define LED_PIN         PA_25  // Đèn LED Đỏ (Cảnh báo Môi trường / CO2) - Cắm thực tế
-#define LED_GREEN_PIN   PA_27  // Đèn LED Xanh (Trạng thái an toàn) - Cắm thực tế
+#define BUZZER_PIN      PA15   // Chân điều khiển Còi Buzzer
+#define LED_PIN         PA25   // Đèn LED Đỏ (Cảnh báo Môi trường / CO2) - Cắm thực tế
+#define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn) - Cắm thực tế
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
-#define TRIG_PIN        PA_14  // Chân phát sóng âm
-#define ECHO_PIN        PA_13  // Chân nhận sóng âm
-#define COLLISION_LED_PIN PB_1 // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
+#define TRIG_PIN        PA14   // Chân phát sóng âm
+#define ECHO_PIN        PA13   // Chân nhận sóng âm
+#define COLLISION_LED_PIN PB1  // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
