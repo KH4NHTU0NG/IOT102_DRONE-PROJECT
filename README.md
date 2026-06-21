@@ -209,18 +209,19 @@ IOT102_DRONE-PROJECT/
 
 ### Nạp firmware lên BW16
 
-1. Mở Arduino IDE, cài Board Package **AmebaD** và thư viện `DHT sensor library` + `PubSubClient`.
-2. Mở file `Phase3_BW16/bw16_sensor/bw16_sensor.ino`.
-3. Sửa 3 dòng cấu hình:
+1. **Lấy địa chỉ IP máy tính:** Mở Terminal (macOS) chạy lệnh `ipconfig getifaddr en0`, hoặc mở Command Prompt (Windows) chạy lệnh `ipconfig` (xem dòng IPv4 Address) để lấy IP mạng WiFi hiện tại của bạn. Ghi nhớ IP này (ví dụ: `192.168.1.156`).
+2. Mở Arduino IDE, cài Board Package **AmebaD** và thư viện `DHT sensor library` + `PubSubClient`.
+3. Mở file `Phase3_BW16/bw16_sensor/bw16_sensor.ino`.
+4. Sửa 3 dòng cấu hình:
    ```cpp
    const char* ssid        = "TEN_WIFI_CUA_BAN";
    const char* password    = "MAT_KHAU_WIFI";
-   const char* mqtt_server = "IP_MAY_TINH_CHAY_DOCKER"; // vd: 192.168.1.15
+   const char* mqtt_server = "IP_MAY_TINH_CHAY_DOCKER"; // Thay bằng IP vừa lấy ở bước 1 (vd: 192.168.1.156)
    ```
-4. Chọn Board: `AmebaD (RTL8720DN) > BW16` và chọn đúng cổng COM.
-5. Nhấn **Upload**. Khi IDE bắt đầu kết nối, nhấn giữ **BURN** trên board rồi nhấn thả **RESET** một lần, sau đó thả **BURN**.
-6. Sau khi IDE báo `Upload done`, nhấn **RESET** một lần nữa để board chạy bình thường.
-7. Mở Serial Monitor (115200 baud) — bạn sẽ thấy log kết nối WiFi và MQTT, rồi dữ liệu cảm biến gửi đi mỗi 2 giây.
+5. Chọn Board: `AmebaD (RTL8720DN) > BW16` và chọn đúng cổng COM.
+6. Nhấn **Upload**. Khi IDE bắt đầu kết nối, nhấn giữ **BURN** trên board rồi nhấn thả **RESET** một lần, sau đó thả **BURN**.
+7. Sau khi IDE báo `Upload done`, nhấn **RESET** một lần nữa để board chạy bình thường.
+8. Mở Serial Monitor (115200 baud) — bạn sẽ thấy log kết nối WiFi và MQTT, rồi dữ liệu cảm biến gửi đi mỗi 2 giây.
 
 ---
 
