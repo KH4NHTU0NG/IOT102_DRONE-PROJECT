@@ -232,7 +232,7 @@ def mavlink_loop():
                     gps_data = {
                         "lat": msg.lat / 1e7,
                         "lon": msg.lon / 1e7,
-                        "alt": msg.alt / 1000.0
+                        "alt": msg.relative_alt / 1000.0  # Dùng relative_alt (độ cao so với mặt đất) thay vì tuyệt đối (MSL)
                     }
         except Exception as e:
             print(f"[MAVLINK] Lỗi đọc gói tin: {e}. Đang reconnect...")
