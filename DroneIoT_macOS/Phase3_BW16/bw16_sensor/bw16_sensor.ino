@@ -11,7 +11,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
-#include <Servo.h>
+#include <AmebaServo.h>
 
 // ── Cấu hình kết nối ─────────────────────────────────────
 // !! Sửa SSID và PASSWORD thành WiFi của bạn !!
@@ -62,7 +62,7 @@ bool mqtt_led_state       = false;
 WiFiClient   wifiClient;
 PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT_TYPE);
-Servo        payloadServo;
+AmebaServo   payloadServo;
 
 unsigned long lastMsg = 0;
 const long    interval = 2000;   // Gửi dữ liệu MQTT mỗi 2 giây
