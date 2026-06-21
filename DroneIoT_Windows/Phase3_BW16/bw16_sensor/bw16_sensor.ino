@@ -23,10 +23,10 @@ const int   mqtt_port   = 1883;
 // QUAN TRỌNG: Không dùng PA_12 (TX Log Console), PA_30 (JTAG), PA_28 (SWD)
 #define DHT_PIN         PA26   // Chân DATA của DHT22
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
-#define MQ135_PIN       PB1    // Chân đọc ADC (Khí gas) - Đã sửa theo đúng sơ đồ README
+#define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas) - Đang cắm thực tế ở đây
 
 #define BUZZER_PIN      PA15   // Chân điều khiển Còi Buzzer
-#define LED_PIN         PB3    // Đèn LED Đỏ (Cảnh báo Môi trường / CO2)
+#define LED_PIN         PB1    // Đèn LED Đỏ (Cảnh báo Môi trường / CO2)
 #define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
