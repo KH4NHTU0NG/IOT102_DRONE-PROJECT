@@ -42,7 +42,7 @@ REM Buoc 3: SITL trong WSL2
 echo.
 echo --- [3/4] Khoi dong SITL trong WSL2 ---
 echo   Mo cua so PowerShell MOI va chay:
-echo   %ROOT_DIR%\Phase2_SITL\run_sitl.ps1
+echo   cd %ROOT_DIR%\Phase2_SITL ^&^& .\run_sitl.ps1
 echo.
 echo   Cho SITL hien "MAV^>" roi nhan Enter...
 pause
