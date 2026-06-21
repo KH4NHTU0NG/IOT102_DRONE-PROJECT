@@ -214,6 +214,10 @@ void setup() {
     digitalWrite(COLLISION_LED_PIN, LED_OFF);
     Serial.println("   [OK] Radar System");
 
+    Serial.println("-> Cấu hình Cảm biến Khí MQ-135..."); delay(50);
+    pinMode(MQ135_PIN, INPUT); // Bắt buộc set INPUT cho chân ADC trên dòng Ameba
+    Serial.println("   [OK] MQ-135 ADC");
+
     Serial.println("[INIT] GPIO OK");
 
     // Khởi tạo DHT22
