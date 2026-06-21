@@ -449,6 +449,20 @@
                 </button>
             </div>
         </div>
+
+        <!-- Servo Payload Drop Commands -->
+        <div class="card">
+            <h2>Cơ Cấu Thả Hàng (Servo)</h2>
+            <div style="text-align: center; margin-bottom: 1rem;">
+                <span id="servo_angle_display" style="font-size: 2rem; font-weight: 800; color: var(--primary-blue); text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);">0°</span>
+            </div>
+            <input type="range" id="servo_slider" min="0" max="180" value="0" style="width: 100%; margin-bottom: 1rem; accent-color: var(--primary-blue);" oninput="updateServoDisplay(this.value)" onchange="sendServoCommand(this.value)">
+            <div class="button-grid" style="grid-template-columns: 1fr 1fr;">
+                <button class="btn btn-blue" onclick="sendServoCommand(90)">Mở Cửa (90°)</button>
+                <button class="btn btn-cyan" onclick="sendServoCommand(0)">Đóng Cửa (0°)</button>
+            </div>
+        </div>
+
         <!-- Cấu hình kết nối MQTT -->
         <div class="card">
             <h2>Cấu Hình Kết Nối MQTT</h2>
@@ -683,6 +697,26 @@
         message.destinationName = TOPIC_PAYLOAD;
         client.send(message);
         addLog(`[PUB] Gửi lệnh payload: ${cmdName} -> ${TOPIC_PAYLOAD}`);
+    }
+
+    // Điều khiển Servo
+    function updateServoDisplay(val) {
+        document.getElementById("servo_angle_display").innerText = val + "°";
+    }
+
+    function sendServoCommand(angle) {
+        const payload = {
+            command: "SERVO",
+            angle: parseInt(angle),
+            timestamp: Date.now()
+        };
+        const MQTTMessage = (typeof Paho.MQTT !== "undefined") ? Paho.MQTT.Message : Paho.Message;
+        const message = new MQTTMessage(JSON.stringify(payload));
+        message.destinationName = TOPIC_PAYLOAD;
+        client.send(message);
+        document.getElementById("servo_slider").value = angle;
+        updateServoDisplay(angle);
+        addLog(`[PUB] Gửi lệnh thả hàng (Góc ${angle}°) -> ${TOPIC_PAYLOAD}`);
     }
 
     // Fix W-004: Dùng slice O(1) thay vì shift() O(n) cho mỗi dòng log

@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+#include <Servo.h>
 
 // ── Cấu hình kết nối ─────────────────────────────────────
 // !! Sửa SSID và PASSWORD thành WiFi của bạn !!
@@ -33,6 +34,9 @@ const int   mqtt_port   = 1883;
 #define TRIG_PIN        PA14   // Chân phát sóng âm
 #define ECHO_PIN        PA13   // Chân nhận sóng âm
 #define COLLISION_LED_PIN PB1  // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
+
+// Cấu hình Động cơ Servo thả hàng
+#define SERVO_PIN       PB2    // Chân PWM điều khiển góc Servo
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
@@ -58,6 +62,7 @@ bool mqtt_led_state       = false;
 WiFiClient   wifiClient;
 PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT_TYPE);
+Servo        payloadServo;
 
 unsigned long lastMsg = 0;
 const long    interval = 2000;   // Gửi dữ liệu MQTT mỗi 2 giây
@@ -133,6 +138,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
         mqtt_buzzer_override = false;
         mqtt_led_override    = false;
         Serial.println("[CONTROL] Khoi phuc che do tu dong");
+    } else if (command == "SERVO") {
+        String angleStr = parseJsonField(msgString, "angle");
+        if (angleStr.length() > 0) {
+            int angle = angleStr.toInt();
+            payloadServo.write(angle);
+            Serial.print("[CONTROL] Đã quay Servo góc: ");
+            Serial.println(angle);
+        }
     }
 }
 
@@ -217,6 +230,11 @@ void setup() {
     Serial.println("-> Cấu hình Cảm biến Khí MQ-135..."); delay(50);
     pinMode(MQ135_PIN, INPUT); // Bắt buộc set INPUT cho chân ADC trên dòng Ameba
     Serial.println("   [OK] MQ-135 ADC");
+
+    Serial.println("-> Cấu hình Động cơ Servo..."); delay(50);
+    payloadServo.attach(SERVO_PIN);
+    payloadServo.write(0); // Khởi động ở góc 0 độ (Đóng cửa)
+    Serial.println("   [OK] Servo Payload");
 
     Serial.println("[INIT] GPIO OK");
 
