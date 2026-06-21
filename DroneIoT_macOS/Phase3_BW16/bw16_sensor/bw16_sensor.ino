@@ -339,7 +339,11 @@ void loop() {
         int mq_raw = analogRead(MQ135_PIN);
 
         // Xác định trạng thái cảnh báo tự động onboard
-        bool is_alert = (mq_raw > CO2_THRESHOLD);
+        // Bỏ qua cảnh báo trong 30 giây đầu tiên để chờ cảm biến MQ-135 làm nóng
+        bool is_alert = false;
+        if (now > 30000) {
+            is_alert = (mq_raw > CO2_THRESHOLD);
+        }
 
         // ── ĐIỀU KHIỂN CÒI BUZZER (Ưu tiên: MQTT > Va Chạm > Tự động Môi trường) ──
         if (mqtt_buzzer_override) {
