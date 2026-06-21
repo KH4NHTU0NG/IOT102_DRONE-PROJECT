@@ -23,16 +23,16 @@ const int   mqtt_port   = 1883;
 // QUAN TRỌNG: Không dùng PA_12 (TX Log Console), PA_30 (JTAG), PA_28 (SWD)
 #define DHT_PIN         PA26   // Chân DATA của DHT22
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
-#define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas)
+#define MQ135_PIN       PB1    // Chân đọc ADC (Khí gas) - Đã sửa theo đúng sơ đồ README
 
 #define BUZZER_PIN      PA15   // Chân điều khiển Còi Buzzer
-#define LED_PIN         PA25   // Đèn LED Đỏ (Cảnh báo)
+#define LED_PIN         PB3    // Đèn LED Đỏ (Cảnh báo) - Đã sửa theo đúng sơ đồ README
 #define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
 
 // Cấu hình mức tích cực (Active Level)
 // Đổi thành HIGH nếu còi/đèn sáng khi chân ở mức HIGH
 // Đổi thành LOW nếu còi/đèn sáng khi chân ở mức LOW
-#define BUZZER_ACTIVE   LOW    // Mặc định Còi hú ở mức LOW (Active Low)
+#define BUZZER_ACTIVE   HIGH   // Còi hú ở mức HIGH (Active High) - Đã sửa theo README
 #define LED_ACTIVE      HIGH   // Mặc định Đèn sáng ở mức HIGH (Active High)
 
 // Phái sinh mức bật tắt
