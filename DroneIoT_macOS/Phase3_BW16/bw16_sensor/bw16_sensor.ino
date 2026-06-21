@@ -26,8 +26,13 @@ const int   mqtt_port   = 1883;
 #define MQ135_PIN       PB1    // Chân đọc ADC (Khí gas) - Đã sửa theo đúng sơ đồ README
 
 #define BUZZER_PIN      PA15   // Chân điều khiển Còi Buzzer
-#define LED_PIN         PB3    // Đèn LED Đỏ (Cảnh báo) - Đã sửa theo đúng sơ đồ README
+#define LED_PIN         PB3    // Đèn LED Đỏ (Cảnh báo Môi trường / CO2)
 #define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
+
+// Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
+#define TRIG_PIN        PA14   // Chân phát sóng âm
+#define ECHO_PIN        PA13   // Chân nhận sóng âm
+#define COLLISION_LED_PIN PA25 // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
@@ -55,7 +60,12 @@ PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT_TYPE);
 
 unsigned long lastMsg = 0;
-const long    interval = 2000;   // Gửi dữ liệu mỗi 2 giây
+const long    interval = 2000;   // Gửi dữ liệu MQTT mỗi 2 giây
+
+// Biến cho Radar Va chạm (non-blocking)
+long  distance_cm = -1;
+unsigned long lastBlinkTime = 0;
+bool  collisionBlinkState = false;
 
 // ── Hàm trích xuất giá trị JSON đơn giản ────────────────
 // Fix F-005: Dùng String thay vì VLA để an toàn trên mọi compiler
@@ -197,6 +207,13 @@ void setup() {
     digitalWrite(LED_GREEN_PIN, LED_ON);
     Serial.println("   [OK] LED Xanh");
 
+    Serial.println("-> Cấu hình SRF05 & LED Va Chạm..."); delay(50);
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+    pinMode(COLLISION_LED_PIN, OUTPUT);
+    digitalWrite(COLLISION_LED_PIN, LED_OFF);
+    Serial.println("   [OK] Radar System");
+
     Serial.println("[INIT] GPIO OK");
 
     // Khởi tạo DHT22
@@ -241,8 +258,44 @@ void loop() {
 
     client.loop();
 
-    // Đọc cảm biến và gửi dữ liệu (non-blocking dùng millis)
     unsigned long now = millis();
+
+    // ── XỬ LÝ RADAR VA CHẠM (Chạy liên tục không bị block) ──
+    // 1. Kích hoạt SRF05
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    // 2. Đọc thời gian vọng (timeout 20000us tương đương ~3.4m)
+    long duration = pulseIn(ECHO_PIN, HIGH, 20000);
+    if (duration == 0) {
+        distance_cm = -1; // Không có vật cản gần
+    } else {
+        distance_cm = duration * 0.034 / 2;
+    }
+
+    bool collision_alert = (distance_cm > 0 && distance_cm < 30);
+
+    // 3. Xử lý Chớp đèn / Còi báo va chạm (Non-blocking Blink 200ms)
+    if (collision_alert) {
+        if (now - lastBlinkTime >= 200) {
+            lastBlinkTime = now;
+            collisionBlinkState = !collisionBlinkState;
+            digitalWrite(COLLISION_LED_PIN, collisionBlinkState ? LED_ON : LED_OFF);
+            
+            // Còi hú theo nhịp nếu không bị Web chèn quyền
+            if (!mqtt_buzzer_override) {
+                digitalWrite(BUZZER_PIN, collisionBlinkState ? BUZZER_ON : BUZZER_OFF);
+            }
+        }
+    } else {
+        digitalWrite(COLLISION_LED_PIN, LED_OFF);
+    }
+
+
+    // ── XỬ LÝ ĐỌC CẢM BIẾN MÔI TRƯỜNG & GỬI MQTT (Mỗi 2 giây) ──
     if (now - lastMsg >= interval) {
         lastMsg = now;
 
@@ -266,14 +319,14 @@ void loop() {
         // Xác định trạng thái cảnh báo tự động onboard
         bool is_alert = (mq_raw > CO2_THRESHOLD);
 
-        // ── ĐIỀU KHIỂN CÒI BUZZER (Ưu tiên MQTT > Tự động) ──
+        // ── ĐIỀU KHIỂN CÒI BUZZER (Ưu tiên: MQTT > Va Chạm > Tự động Môi trường) ──
         if (mqtt_buzzer_override) {
             digitalWrite(BUZZER_PIN, mqtt_buzzer_state ? BUZZER_ON : BUZZER_OFF);
-        } else {
+        } else if (!collision_alert) { // Chỉ gán theo Môi trường nếu không có va chạm
             digitalWrite(BUZZER_PIN, is_alert ? BUZZER_ON : BUZZER_OFF);
         }
 
-        // ── ĐIỀU KHIỂN ĐÈN LED (Ưu tiên MQTT > Tự động) ──
+        // ── ĐIỀU KHIỂN ĐÈN LED MÔI TRƯỜNG (Ưu tiên MQTT > Tự động) ──
         if (mqtt_led_override) {
             digitalWrite(LED_PIN,       mqtt_led_state ? LED_ON : LED_OFF);
             digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LED_OFF : LED_ON);
@@ -282,12 +335,13 @@ void loop() {
             digitalWrite(LED_GREEN_PIN, is_alert ? LED_OFF : LED_ON);
         }
 
-        // Đóng gói dữ liệu JSON (có thêm field dht_ok để debug)
+        // Đóng gói dữ liệu JSON
         String payload = "{";
         payload += "\"temp\":"     + String(temp, 1);
         payload += ",\"humidity\":" + String(hum, 1);
         payload += ",\"co2\":"     + String(mq_raw);
         payload += ",\"alert\":"   + String(is_alert ? 1 : 0);
+        payload += ",\"distance\":" + String(distance_cm);
         payload += ",\"rssi\":"    + String(WiFi.RSSI());
         payload += ",\"dht_ok\":"  + String(dht_ok ? 1 : 0);
         payload += "}";

@@ -183,7 +183,7 @@
         }
 
         /* Custom alert indicator in telemetry */
-        #alert_value.alert-active {
+        #alert_value.alert-active, #distance_value.radar-alert {
             color: var(--warning-red);
             text-shadow: 0 0 10px var(--glow-red);
             animation: textGlow 1s infinite alternate;
@@ -192,6 +192,19 @@
         @keyframes textGlow {
             from { text-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
             to { text-shadow: 0 0 15px rgba(239, 68, 68, 0.8); }
+        }
+
+        .radar-warning-box {
+            display: none;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--warning-red);
+            color: var(--warning-red);
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 12px;
+            font-weight: bold;
+            margin-top: 0.5rem;
+            animation: textGlow 0.5s infinite alternate;
         }
 
         /* Buttons control grid */
@@ -377,10 +390,17 @@
                     <span class="telemetry-label">Mức độ cảnh báo</span>
                     <span id="alert_value" class="telemetry-val">AN TOÀN</span>
                 </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Radar Chống Va Chạm</span>
+                    <span id="distance_value" class="telemetry-val">--<span>cm</span></span>
+                </div>
                 <div class="telemetry-item" style="border: none; padding-bottom: 0;">
                     <span class="telemetry-label">RSSI Wi-Fi BW16</span>
                     <span id="rssi_value" class="telemetry-val" style="color: var(--primary-blue)">--<span>dBm</span></span>
                 </div>
+            </div>
+            <div id="radar_warning" class="radar-warning-box">
+                ⚠️ PHÁT HIỆN VẬT CẢN TRƯỚC MẶT
             </div>
         </div>
 
@@ -582,7 +602,7 @@
             try {
                 const data = JSON.parse(payload);
 
-                // Fix W-002: Null-safe access — BW16 có thể gửi thiếu field
+                // Fix W-002: Null-safe access
                 const temp = (data.temp != null) ? Number(data.temp).toFixed(1) : '--';
                 const hum  = (data.humidity != null) ? Number(data.humidity).toFixed(1) : '--';
                 const co2  = (data.co2 != null) ? data.co2 : '--';
@@ -606,6 +626,27 @@
 
                 if (data.rssi != null) {
                     document.getElementById('rssi_value').innerHTML = `${data.rssi}<span>dBm</span>`;
+                }
+
+                // Xử lý Radar Va chạm (SRF05)
+                if (data.distance !== undefined) {
+                    let distEl = document.getElementById("distance_value");
+                    let radarWarnEl = document.getElementById("radar_warning");
+                    
+                    if (data.distance === -1) {
+                        distEl.innerHTML = "> 3m <span>(Trống)</span>";
+                        distEl.className = "telemetry-val";
+                        radarWarnEl.style.display = "none";
+                    } else {
+                        distEl.innerHTML = data.distance + "<span> cm</span>";
+                        if (data.distance > 0 && data.distance < 30) {
+                            distEl.className = "telemetry-val radar-alert";
+                            radarWarnEl.style.display = "block";
+                        } else {
+                            distEl.className = "telemetry-val";
+                            radarWarnEl.style.display = "none";
+                        }
+                    }
                 }
 
             } catch (e) {

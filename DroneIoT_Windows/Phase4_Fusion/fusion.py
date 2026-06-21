@@ -1,6 +1,6 @@
 """
 fusion.py — Phase 4: Data Fusion Gateway
-Platform: Windows 10/11
+Platform: macOS Apple Silicon
 
 Chức năng:
   - Chạy luồng MQTT: Nhận sensor data từ BW16 và lệnh bay từ Web Control
@@ -232,7 +232,7 @@ def mavlink_loop():
                     gps_data = {
                         "lat": msg.lat / 1e7,
                         "lon": msg.lon / 1e7,
-                        "alt": msg.relative_alt / 1000.0  # Dùng relative_alt (độ cao so với mặt đất)
+                        "alt": msg.relative_alt / 1000.0  # Dùng relative_alt (độ cao so với mặt đất) thay vì tuyệt đối (MSL)
                     }
         except Exception as e:
             print(f"[MAVLINK] Lỗi đọc gói tin: {e}. Đang reconnect...")
@@ -247,7 +247,7 @@ def main():
     global master
     print("=" * 60)
     print("  Drone IoT — fusion.py")
-    print("  Platform: Windows 10/11")
+    print("  Platform: macOS Apple Silicon")
     print("=" * 60)
 
     token = load_token()
@@ -292,6 +292,7 @@ def main():
             hum  = max(0.0, float(sensor.get("humidity", 0.0)))
             co2  = max(0, int(sensor.get("co2", 0)))
             alert = sensor.get("alert", 0)
+            distance = float(sensor.get("distance", -1.0))
             rssi  = sensor.get("rssi", 0)
 
             point = (
@@ -303,6 +304,7 @@ def main():
                 .field("humidity",    float(hum))
                 .field("co2",         float(co2))
                 .field("alert",       float(alert))
+                .field("distance",    float(distance))
                 .field("wifi_rssi",   float(rssi))
             )
 
