@@ -399,11 +399,12 @@ Kết quả chi tiết được ghi vào `Phase5_Operations/test_report.txt`.
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | Board BW16 treo ngay sau khi khởi động, không in gì sau banner | Chân GPIO bị xung đột | Kiểm tra không dùng PA_12, PA_30 trong code |
-| Serial Monitor thấy WiFi OK nhưng MQTT thất bại `rc=-2` | Sai IP broker | Chạy `ipconfig getifaddr en0` (macOS) để lấy IP đúng, cập nhật `mqtt_server` trong code |
+| Serial Monitor thấy WiFi OK nhưng MQTT thất bại `rc=-2` | Sai IP broker | Chạy `ipconfig getifaddr en0` (macOS) hoặc `ipconfig` (Windows) để lấy IP đúng, cập nhật `mqtt_server` trong code Arduino |
+| Web Control báo "Đã kết nối", bấm nút nhưng bảng mạch thật không kêu còi/sáng đèn | Mạch BW16 bị ngắt kết nối do IP máy Mac thay đổi (cục phát WiFi cấp lại IP mới) | Kiểm tra IP hiện tại của máy tính, sửa lại `mqtt_server` trong `bw16_sensor.ino` cho đúng IP mới và Nạp (Upload) lại code |
 | fusion.py in GPS (0.00, 0.00) | SITL chưa khởi động hoặc port 5763 bị chiếm | Chạy stop_all.sh rồi khởi động lại SITL trước |
-| Web Control badge "Ket noi loi" | Mosquitto chưa chạy hoặc mở file:/// bằng Chrome | Kiểm tra `docker ps`, dùng Firefox hoặc chạy HTTP server |
+| Web Control báo "Kết nối lỗi" hoặc "Cannot read properties" | Mosquitto chưa chạy hoặc mở file:/// bằng Chrome | Kiểm tra `docker ps`, và bắt buộc truy cập qua `http://localhost:8080` (nhấn Ctrl+F5 để xóa cache) |
 | Nhiệt độ/độ ẩm hiển thị 0 | DHT22 chưa cắm hoặc sai chân | Cắm DHT22 vào PA_26, kiểm tra Serial Monitor xem board báo lỗi không |
-| TAKEOFF không hoạt động | Pre-arm check thất bại trong SITL | Chờ QGroundControl hiển thị "Ready to Fly" trước khi nhấn TAKEOFF |
+| TAKEOFF không hoạt động | Pre-arm check thất bại trong SITL | Chờ QGroundControl/SITL tải xong (EKF3 origin set) trước khi nhấn TAKEOFF |
 
 ---
 
