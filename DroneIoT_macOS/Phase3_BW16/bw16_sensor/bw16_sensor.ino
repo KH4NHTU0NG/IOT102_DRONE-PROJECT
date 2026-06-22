@@ -26,17 +26,17 @@ const int   mqtt_port   = 1883;
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
 #define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas) - Đang cắm thực tế ở đây
 
-#define BUZZER_PIN      PA15   // Chân điều khiển Còi Buzzer
-#define LED_PIN         PA25   // Đèn LED Đỏ (Cảnh báo Môi trường / CO2) - Cắm thực tế
-#define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn) - Cắm thực tế
+#define BUZZER_PIN      PA14   // Chân điều khiển Còi Buzzer (Đổi từ PA15 sang PA14 để chống hú lúc boot)
+#define LED_PIN         PA15   // Đèn LED Đỏ (Cảnh báo Môi trường)
+#define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
-#define TRIG_PIN        PB2    // Chân phát sóng âm (Đổi từ PA14 sang PB2)
+#define TRIG_PIN        PB2    // Chân phát sóng âm
 #define ECHO_PIN        PA13   // Chân nhận sóng âm
 #define COLLISION_LED_PIN PB1  // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
 
 // Cấu hình Động cơ Servo thả hàng
-#define SERVO_PIN       PA14   // Chân PWM điều khiển góc Servo (Bắt buộc dùng PA14 vì có HW PWM)
+#define SERVO_PIN       PA25   // Chân PWM điều khiển góc Servo (AmebaServo CHỈ hỗ trợ PA25, PA26, PA13, PA12)
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
