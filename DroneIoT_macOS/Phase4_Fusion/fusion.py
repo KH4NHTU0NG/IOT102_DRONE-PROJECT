@@ -30,7 +30,7 @@ INFLUX_BUCKET = "drone_data"
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT   = 1883
 
-TOPIC_SENSORS = "tuonghuy_drone/bw16/sensors"
+TOPIC_SENSORS = "tuonghuy_drone/payload/sensors"
 TOPIC_FLIGHT_CMD = "tuonghuy_drone/control/flight"
 
 SITL_HOST     = "127.0.0.1"

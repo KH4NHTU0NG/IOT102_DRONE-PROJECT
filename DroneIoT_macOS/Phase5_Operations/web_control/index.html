@@ -618,7 +618,7 @@
 
                 // Fix W-002: Null-safe access
                 const temp = (data.temp != null) ? Number(data.temp).toFixed(1) : '--';
-                const hum  = (data.humidity != null) ? Number(data.humidity).toFixed(1) : '--';
+                const hum  = (data.hum != null) ? Number(data.hum).toFixed(1) : '--';
                 const co2  = (data.co2 != null) ? data.co2 : '--';
 
                 document.getElementById('temp_value').innerHTML = `${temp}<span>°C</span>`;
