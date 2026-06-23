@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* ── Reset & Base ────────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -457,12 +458,75 @@
         .tag-amber  { background: var(--amber-soft);  color: var(--amber); }
         .tag-gray   { background: var(--gray-soft);   color: var(--gray); }
 
-        /* ── Responsive ──────────────────────────────────── */
+        /* ── Charts ──────────────────────────────────────────── */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+        .chart-card.span-2 { grid-column: span 2; }
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .chart-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-2);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chart-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .chart-latest {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-1);
+        }
+        .chart-body {
+            padding: 10px 12px 12px;
+            position: relative;
+            height: 120px;
+        }
+        .chart-body canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .chart-no-data {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: var(--text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 768px) {
             .grid-main  { grid-template-columns: 1fr; }
             .grid-bottom { grid-template-columns: 1fr; }
             .config-row { grid-template-columns: 1fr; }
             .btn-row    { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .chart-card.span-2 { grid-column: span 1; }
         }
     </style>
 </head>
@@ -636,6 +700,86 @@
 
     </div>
 
+    <!-- ── Charts ────────────────────────────────────────── -->
+    <div class="charts-grid">
+
+        <!-- Nhiệt độ -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">
+                    <span class="chart-dot" style="background:#2563eb"></span>
+                    Nhiệt độ
+                </span>
+                <span class="chart-latest" id="chart_temp_latest">--</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart_temp"></canvas>
+                <div class="chart-no-data" id="no_data_temp">Chờ dữ liệu...</div>
+            </div>
+        </div>
+
+        <!-- Độ ẩm -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">
+                    <span class="chart-dot" style="background:#0891b2"></span>
+                    Độ ẩm
+                </span>
+                <span class="chart-latest" id="chart_hum_latest">--</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart_hum"></canvas>
+                <div class="chart-no-data" id="no_data_hum">Chờ dữ liệu...</div>
+            </div>
+        </div>
+
+        <!-- CO2 -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">
+                    <span class="chart-dot" style="background:#d97706"></span>
+                    CO2 (ADC thô)
+                </span>
+                <span class="chart-latest" id="chart_co2_latest">--</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart_co2"></canvas>
+                <div class="chart-no-data" id="no_data_co2">Chờ dữ liệu...</div>
+            </div>
+        </div>
+
+        <!-- Khoảng cách (span 2) -->
+        <div class="chart-card span-2">
+            <div class="chart-header">
+                <span class="chart-title">
+                    <span class="chart-dot" style="background:#dc2626"></span>
+                    Khoảng cách (SRF05)
+                </span>
+                <span class="chart-latest" id="chart_dist_latest">--</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart_dist"></canvas>
+                <div class="chart-no-data" id="no_data_dist">Chờ dữ liệu...</div>
+            </div>
+        </div>
+
+        <!-- RSSI -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">
+                    <span class="chart-dot" style="background:#7c3aed"></span>
+                    RSSI BW16
+                </span>
+                <span class="chart-latest" id="chart_rssi_latest">--</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart_rssi"></canvas>
+                <div class="chart-no-data" id="no_data_rssi">Chờ dữ liệu...</div>
+            </div>
+        </div>
+
+    </div>
+
     <!-- ── Log ────────────────────────────────────────────── -->
     <div class="card">
         <div class="card-body">
@@ -660,6 +804,7 @@
     const TOPIC_SENSORS = "tuonghuy_drone/payload/sensors";
     const TOPIC_FLIGHT  = "tuonghuy_drone/control/flight";
     const TOPIC_PAYLOAD = "tuonghuy_drone/control/payload";
+    const CHART_MAX_PTS = 60; // Số điểm tối đa hiển thị trên mỗi chart
 
     /* ── Cached DOM refs ───────────────────────────────── */
     const logConsole  = document.getElementById('log_console');
@@ -684,6 +829,94 @@
     let reconnectAttempts = 0;
     let reconnectTimer   = null;
     let logLineCount     = 0;
+
+    /* ── Chart Setup ───────────────────────────────────── */
+    function makeChart(canvasId, color, yLabel, unit, suggestedMin, suggestedMax) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    borderColor: color,
+                    backgroundColor: color + '18',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 200 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.parsed.y} ${unit}`
+                        },
+                        backgroundColor: '#1f2937',
+                        titleFont: { family: 'JetBrains Mono', size: 11 },
+                        bodyFont:  { family: 'JetBrains Mono', size: 11 },
+                        padding: 8,
+                        cornerRadius: 4
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { family: 'JetBrains Mono', size: 9 },
+                            color: '#9ca3af',
+                            maxTicksLimit: 6,
+                            maxRotation: 0
+                        },
+                        grid: { color: '#f0f2f5' }
+                    },
+                    y: {
+                        suggestedMin: suggestedMin,
+                        suggestedMax: suggestedMax,
+                        ticks: {
+                            font: { family: 'JetBrains Mono', size: 9 },
+                            color: '#9ca3af',
+                            maxTicksLimit: 4
+                        },
+                        grid: { color: '#f0f2f5' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Khởi tạo 5 chart
+    const charts = {
+        temp: makeChart('chart_temp', '#2563eb', 'Nhiệt độ', '°C',  0,  50),
+        hum:  makeChart('chart_hum',  '#0891b2', 'Độ ẩm',    '%',   0, 100),
+        co2:  makeChart('chart_co2',  '#d97706', 'CO2',      'ADC', 0, 4095),
+        dist: makeChart('chart_dist', '#dc2626', 'Khoảng cách', 'cm', 0, 400),
+        rssi: makeChart('chart_rssi', '#7c3aed', 'RSSI',    'dBm', -90, -20)
+    };
+
+    // Cập nhật 1 chart với giá trị mới
+    function pushChart(chartKey, value, latestId, noDataId, unit) {
+        if (value === null || value === undefined || isNaN(+value)) return;
+        const chart = charts[chartKey];
+        const now = new Date();
+        const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        chart.data.labels.push(ts);
+        chart.data.datasets[0].data.push(+value);
+        if (chart.data.labels.length > CHART_MAX_PTS) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
+        chart.update('none'); // 'none' = skip animation for performance
+        document.getElementById(latestId).textContent = (+value).toFixed(1) + ' ' + unit;
+        const noData = document.getElementById(noDataId);
+        if (noData) noData.style.display = 'none';
+    }
 
     /* ── Connection ────────────────────────────────────── */
     function startConnection() {
@@ -831,6 +1064,20 @@
                     }
                 }
             }
+
+            /* ── Cập nhật Charts ────────────────────────── */
+            pushChart('temp', d.temp,     'chart_temp_latest', 'no_data_temp', '°C');
+            pushChart('hum',  humVal,     'chart_hum_latest',  'no_data_hum',  '%');
+            pushChart('co2',  d.co2,      'chart_co2_latest',  'no_data_co2',  'ADC');
+            pushChart('rssi', d.rssi,     'chart_rssi_latest', 'no_data_rssi', 'dBm');
+            if (d.distance !== undefined && d.distance !== -1) {
+                pushChart('dist', d.distance, 'chart_dist_latest', 'no_data_dist', 'cm');
+            } else if (d.distance === -1) {
+                // >3m = 300cm placeholder cho chart
+                pushChart('dist', 300, 'chart_dist_latest', 'no_data_dist', 'cm');
+                document.getElementById('chart_dist_latest').textContent = '> 3m';
+            }
+
         } catch (e) {
             addLog(`[ERR] Parse JSON thất bại: ${payload}`);
         }
