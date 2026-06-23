@@ -26,13 +26,13 @@ const int   mqtt_port   = 1883;
 // ── Pin definitions ───────────────────────────────────────
 // ── Pin definitions ───────────────────────────────────────
 // Màn hình OLED I2C bắt buộc sử dụng PA25 (SCL) và PA26 (SDA)
-#define DHT_PIN         PA27   // Chân DATA của DHT22 (Dời từ PA26)
+#define DHT_PIN         PA30   // Chân DATA của DHT22 (Dời sang PA30 theo yêu cầu)
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
 #define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas)
 
 #define BUZZER_PIN      PA14   // Chân điều khiển Còi Buzzer
 #define LED_PIN         PA15   // Đèn LED Đỏ (Cảnh báo Môi trường)
-// Đã loại bỏ LED_GREEN_PIN để tiết kiệm chân
+#define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn - Đã khôi phục)
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
 #define TRIG_PIN        PB2    // Chân phát sóng âm
@@ -231,6 +231,11 @@ void setup() {
     digitalWrite(LED_PIN, LED_OFF);
     Serial.println("   [OK] LED Đỏ");
 
+    Serial.println("-> Cấu hình LED Xanh (PA27)..."); delay(50);
+    pinMode(LED_GREEN_PIN, OUTPUT);
+    digitalWrite(LED_GREEN_PIN, LED_ON);
+    Serial.println("   [OK] LED Xanh");
+
     
     pinMode(COLLISION_LED_PIN, OUTPUT);
     digitalWrite(COLLISION_LED_PIN, LED_OFF);
@@ -374,8 +379,10 @@ void loop() {
         // ── ĐIỀU KHIỂN ĐÈN LED MÔI TRƯỜNG (Ưu tiên MQTT > Tự động) ──
         if (mqtt_led_override) {
             digitalWrite(LED_PIN,       mqtt_led_state ? LED_ON : LED_OFF);
+            digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LED_OFF : LED_ON);
         } else {
             digitalWrite(LED_PIN,       is_alert ? LED_ON : LED_OFF);
+            digitalWrite(LED_GREEN_PIN, is_alert ? LED_OFF : LED_ON);
         }
 
         // Đóng gói dữ liệu JSON
