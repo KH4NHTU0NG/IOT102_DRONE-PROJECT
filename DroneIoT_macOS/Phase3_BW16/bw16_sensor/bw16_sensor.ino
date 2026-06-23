@@ -20,7 +20,7 @@
 // !! Sửa SSID và PASSWORD thành WiFi của bạn !!
 const char* ssid        = "TuongHuy";       // Tên WiFi (phân biệt hoa thường)
 const char* password    = "kminh1983";      // Mật khẩu WiFi
-const char* mqtt_server = "192.168.1.156";  // IP máy Mac chạy Mosquitto broker
+const char* mqtt_server = "192.168.1.185";  // IP máy Mac chạy Mosquitto broker
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
