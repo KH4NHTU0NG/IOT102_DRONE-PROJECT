@@ -198,7 +198,8 @@ void connectMQTT() {
     while (!client.connected() && retry < 5) {
         Serial.print("[MQTT] Dang ket noi broker...");
 
-        if (client.connect("BW16_Payload")) {
+        String clientId = "TuongHuy_BW16_" + String(random(0xffff), HEX);
+        if (client.connect(clientId.c_str())) {
             Serial.println(" OK!");
             client.subscribe(topic_payload);
             Serial.print("[MQTT] Da subscribe: ");
