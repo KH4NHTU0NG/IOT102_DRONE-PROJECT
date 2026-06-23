@@ -40,7 +40,7 @@ fi
 echo ""
 echo "━━━ [3/4] Khởi động SITL ━━━"
 echo "  → Mở Terminal MỚI và chạy:"
-echo "     cd $ROOT_DIR/Phase2_SITL && bash run_sitl.sh"
+echo "     cd ../Phase2_SITL && bash run_sitl.sh"
 echo ""
 read -r -p "  Chờ SITL hiện 'MAV>' rồi nhấn Enter để tiếp tục..."
 
