@@ -469,11 +469,11 @@
             <div class="telemetry-row" style="gap: 0.75rem;">
                 <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                     <label class="telemetry-label" style="font-size: 0.85rem;">Broker IP / Host</label>
-                    <input type="text" id="mqtt_host" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
+                    <input type="text" id="mqtt_host" value="broker.hivemq.com" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                     <label class="telemetry-label" style="font-size: 0.85rem;">Cổng WebSocket</label>
-                    <input type="number" id="mqtt_port" value="9001" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
+                    <input type="number" id="mqtt_port" value="8000" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; width: 100%;">
                 </div>
                 <button id="btn_connect" class="btn btn-blue" onclick="toggleConnection()" style="margin-top: 0.5rem; width: 100%;">
                     Kết Nối
@@ -499,9 +499,9 @@
 
 <script type="text/javascript">
     // Các topic điều khiển
-    const TOPIC_SENSORS = "drone/payload/sensors";
-    const TOPIC_FLIGHT  = "drone/control/flight";
-    const TOPIC_PAYLOAD = "drone/control/payload";
+    const TOPIC_SENSORS = "tuonghuy_drone/payload/sensors";
+    const TOPIC_FLIGHT  = "tuonghuy_drone/control/flight";
+    const TOPIC_PAYLOAD = "tuonghuy_drone/control/payload";
 
     const logConsole = document.getElementById('log_console');
     const hostInput = document.getElementById('mqtt_host');
@@ -509,15 +509,15 @@
     const btnConnect = document.getElementById('btn_connect');
 
     // Thiết lập giá trị mặc định cho UI
-    hostInput.value = window.location.hostname || '127.0.0.1';
+    hostInput.value = 'broker.hivemq.com';
     
     let client = null;
     let isConnected = false;
 
     // Bắt đầu kết nối
     function startConnection() {
-        const host = hostInput.value.trim() || '127.0.0.1';
-        const port = Number(portInput.value) || 9001;
+        const host = hostInput.value.trim() || 'broker.hivemq.com';
+        const port = Number(portInput.value) || 8000;
         const clientId = 'web_client_' + Math.random().toString(16).slice(2, 10);
 
         addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ws://${host}:${port}/mqtt...`);

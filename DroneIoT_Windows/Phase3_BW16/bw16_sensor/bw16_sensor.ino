@@ -18,9 +18,11 @@
 
 // ── Cấu hình kết nối ─────────────────────────────────────
 // !! Sửa SSID và PASSWORD thành WiFi của bạn !!
-const char* ssid        = "TuongHuy";       // Tên WiFi (phân biệt hoa thường)
+const char* ssid        = "TuongHuy";       // Tên WiFi
 const char* password    = "kminh1983";      // Mật khẩu WiFi
-const char* mqtt_server = "192.168.1.185";  // IP máy Mac chạy Mosquitto broker
+const char* mqtt_server = "broker.hivemq.com"; // Đổi topic thành duy nhất để không bị trùng lặp trên mạng Public
+const char* topic_sensors = "tuonghuy_drone/payload/sensors";
+const char* topic_payload = "tuonghuy_drone/control/payload";
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
@@ -198,8 +200,9 @@ void connectMQTT() {
 
         if (client.connect("BW16_Payload")) {
             Serial.println(" OK!");
-            client.subscribe("drone/control/payload");
-            Serial.println("[MQTT] Da subscribe: drone/control/payload");
+            client.subscribe(topic_payload);
+            Serial.print("[MQTT] Da subscribe: ");
+            Serial.println(topic_payload);
         } else {
             Serial.print(" That bai, rc=");
             Serial.print(client.state());

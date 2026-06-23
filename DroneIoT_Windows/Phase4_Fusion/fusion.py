@@ -26,8 +26,12 @@ INFLUX_TOKEN  = "SPSuc2iYUViMysgXOlYD61aYXaiarb7hBPfpHZBAWCknUphbdH4Vqa_C7VLEAp6
 INFLUX_ORG    = "drone_org"
 INFLUX_BUCKET = "drone_data"
 
-MQTT_BROKER   = "127.0.0.1"
-MQTT_PORT     = 1883
+# ── Cấu hình MQTT ──
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_PORT   = 1883
+
+TOPIC_SENSORS = "tuonghuy_drone/bw16/sensors"
+TOPIC_FLIGHT_CMD = "tuonghuy_drone/control/flight"
 
 SITL_HOST     = "127.0.0.1"
 SITL_PORT     = 5763  # Cổng MAVProxy chuyển tiếp ra TCP
@@ -68,9 +72,9 @@ def load_token() -> str:
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         print(f"[MQTT] ✅ Kết nối thành công broker {MQTT_BROKER}:{MQTT_PORT}")
-        client.subscribe("drone/payload/sensors")
-        client.subscribe("drone/control/flight")
-        print("[MQTT] Đã subscribe: drone/payload/sensors & drone/control/flight")
+        client.subscribe(TOPIC_SENSORS)
+        client.subscribe(TOPIC_FLIGHT_CMD)
+        print(f"[MQTT] Đã subscribe: {TOPIC_SENSORS} & {TOPIC_FLIGHT_CMD}")
     else:
         print(f"[MQTT] ❌ Kết nối thất bại, code={reason_code}")
 
@@ -79,12 +83,12 @@ def on_message(client, userdata, msg):
     topic = msg.topic
     try:
         payload_str = msg.payload.decode("utf-8")
-        if topic == "drone/payload/sensors":
+        if topic == TOPIC_SENSORS:
             data = json.loads(payload_str)
             with state_lock:
                 sensor_data = data
             sensor_received.set()
-        elif topic == "drone/control/flight":
+        elif topic == TOPIC_FLIGHT_CMD:
             data = json.loads(payload_str)
             command = data.get("command")
             alt = data.get("alt", 10.0)
