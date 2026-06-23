@@ -53,7 +53,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
 #define BUZZER_ACTIVE   LOW    // Đổi thành LOW (Buzzer kích ở mức thấp)
-#define LED_ACTIVE      LOW    // Giữ nguyên LOW cho LED vì LED bị ngược
+#define LED_ACTIVE      HIGH   // Đổi thành HIGH (Đèn sáng khi cấp 3.3V)
 
 // Phái sinh mức bật tắt
 #define BUZZER_ON       BUZZER_ACTIVE
