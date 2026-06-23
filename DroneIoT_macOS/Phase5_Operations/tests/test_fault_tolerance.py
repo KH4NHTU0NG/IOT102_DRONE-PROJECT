@@ -10,7 +10,7 @@ from influxdb_client import InfluxDBClient
 INFLUX_URL = "http://localhost:8086"
 INFLUX_ORG = "drone_org"
 INFLUX_BUCKET = "drone_data"
-MQTT_BROKER = "127.0.0.1"
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 
 def get_token():
@@ -25,7 +25,7 @@ def get_token():
         if os.path.exists(abs_p):
             with open(abs_p) as f:
                 return f.read().strip()
-    return os.environ.get("INFLUX_TOKEN", "SPSuc2iYUViMysgXOlYD61aYXaiarb7hBPfpHZBAWCknUphbdH4Vqa_C7VLEAp6622vkOXtg1W_yVx5TYG1h9A==")
+    return os.environ.get("INFLUX_TOKEN", "")
 
 def check_process_running(pid):
     try:
@@ -93,6 +93,8 @@ def test_scenario_2():
     stress_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     try:
         stress_client.connect(MQTT_BROKER, MQTT_PORT)
+        stress_client.loop_start()
+        time.sleep(0.5) # Đợi kết nối MQTT hoàn tất
     except Exception as e:
         print(f"  - Không kết nối được MQTT Broker: {e}")
         return "FAIL"
@@ -110,7 +112,7 @@ def test_scenario_2():
                 "alert": 0,
                 "rssi": -50
             }
-            res = stress_client.publish("drone/payload/sensors", json.dumps(payload))
+            res = stress_client.publish("tuonghuy_drone/payload/sensors", json.dumps(payload))
             if res.rc == mqtt.MQTT_ERR_SUCCESS:
                 success_count += 1
         
@@ -119,6 +121,7 @@ def test_scenario_2():
         if elapsed < 1.0:
             time.sleep(1.0 - elapsed)
             
+    stress_client.loop_stop()
     stress_client.disconnect()
     print(f"  - Stress test hoàn tất: Gửi thành công {success_count}/500 tin nhắn.")
     

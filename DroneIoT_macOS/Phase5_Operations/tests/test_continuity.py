@@ -21,7 +21,7 @@ def get_token():
         if os.path.exists(abs_p):
             with open(abs_p) as f:
                 return f.read().strip()
-    return os.environ.get("INFLUX_TOKEN", "SPSuc2iYUViMysgXOlYD61aYXaiarb7hBPfpHZBAWCknUphbdH4Vqa_C7VLEAp6622vkOXtg1W_yVx5TYG1h9A==")
+    return os.environ.get("INFLUX_TOKEN", "")
 
 def check_continuity():
     token = get_token()

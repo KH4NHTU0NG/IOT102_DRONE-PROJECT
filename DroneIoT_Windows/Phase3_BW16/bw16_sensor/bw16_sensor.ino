@@ -15,17 +15,16 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "secrets.h"
 
 // ── Cấu hình kết nối ─────────────────────────────────────
-// !! Sửa SSID và PASSWORD thành WiFi của bạn !!
-const char* ssid        = "TuongHuy";       // Tên WiFi
-const char* password    = "kminh1983";      // Mật khẩu WiFi
+const char* ssid        = SECRET_SSID;       // Tên WiFi (đọc từ secrets.h)
+const char* password    = SECRET_PASS;      // Mật khẩu WiFi (đọc từ secrets.h)
 const char* mqtt_server = "broker.hivemq.com"; // Đổi topic thành duy nhất để không bị trùng lặp trên mạng Public
 const char* topic_sensors = "tuonghuy_drone/payload/sensors";
 const char* topic_payload = "tuonghuy_drone/control/payload";
 const int   mqtt_port   = 1883;
 
-// ── Pin definitions ───────────────────────────────────────
 // ── Pin definitions ───────────────────────────────────────
 // Màn hình OLED I2C bắt buộc sử dụng PA25 (SCL) và PA26 (SDA)
 #define DHT_PIN         PA30   // Chân DATA của DHT22 (Dời sang PA30 theo yêu cầu)
@@ -61,8 +60,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define LED_ON          LED_ACTIVE
 #define LED_OFF         (!LED_ACTIVE)
 
-// Ngưỡng cảnh báo khí CO2 tự động (thang đo ADC 12-bit thô 0-4095)
-const int CO2_THRESHOLD = 600;
+// Ngưỡng cảnh báo & Hằng số cấu hình
+const int   CO2_THRESHOLD      = 600;    // Ngưỡng ADC 12-bit (0-4095)
+const int   COLLISION_DIST_CM  = 30;     // Ngưỡng khoảng cách va chạm (cm)
+const int   WIFI_MAX_RETRIES   = 30;     // Số lần thử kết nối WiFi
+const int   MQTT_MAX_RETRIES   = 5;      // Số lần thử kết nối MQTT
+const int   MQTT_RETRY_DELAY   = 3000;   // Thời gian chờ giữa các lần thử MQTT (ms)
+const int   MQTT_KEEPALIVE     = 60;     // Thời gian keepalive MQTT (s)
+const unsigned long PULSE_TIMEOUT_US = 20000; // Timeout đọc siêu âm (µs)
+const unsigned long MQ135_WARMUP_MS  = 30000; // Thời gian khởi động MQ-135 (ms)
+const unsigned long BLINK_INTERVAL   = 200;   // Nhịp chớp đèn va chạm (ms)
+const uint8_t OLED_I2C_ADDR    = 0x3C;   // Địa chỉ I2C màn hình OLED
 
 // Trạng thái ghi đè từ MQTT (Quyền ưu tiên cao nhất)
 bool mqtt_buzzer_override = false;
@@ -88,6 +96,8 @@ unsigned long lastBlinkTime = 0;
 // Biến lưu trữ dữ liệu cảm biến toàn cục cho OLED
 float temp_val = 0.0;
 float hum_val  = 0.0;
+int   mq_raw_val = 0;
+bool  env_alert = false;
 bool  collisionBlinkState = false;
 
 // ── Hàm trích xuất giá trị JSON đơn giản ────────────────
@@ -97,28 +107,40 @@ String parseJsonField(const String& json, const String& key) {
     if (keyIndex == -1) return "";
     int colonIndex = json.indexOf(":", keyIndex);
     if (colonIndex == -1) return "";
-    int startIndex = json.indexOf("\"", colonIndex);
-    int endIndex;
-    if (startIndex == -1 || startIndex > json.indexOf(",", colonIndex)) {
-        int commaIndex = json.indexOf(",", colonIndex);
-        int braceIndex = json.indexOf("}", colonIndex);
-        if (commaIndex == -1) endIndex = braceIndex;
-        else if (braceIndex == -1) endIndex = commaIndex;
-        else endIndex = min(commaIndex, braceIndex);
-        String val = json.substring(colonIndex + 1, endIndex);
+    
+    // Tìm ký tự có nghĩa đầu tiên sau dấu hai chấm
+    int valStartIndex = colonIndex + 1;
+    while (valStartIndex < json.length() && (json[valStartIndex] == ' ' || json[valStartIndex] == '\t' || json[valStartIndex] == '\r' || json[valStartIndex] == '\n')) {
+        valStartIndex++;
+    }
+    if (valStartIndex >= json.length()) return "";
+    
+    if (json[valStartIndex] == '"') {
+        // Trường là chuỗi (string)
+        int valEndIndex = json.indexOf("\"", valStartIndex + 1);
+        if (valEndIndex == -1) return "";
+        return json.substring(valStartIndex + 1, valEndIndex);
+    } else {
+        // Trường là số hoặc boolean hoặc null
+        int commaIndex = json.indexOf(",", valStartIndex);
+        int braceIndex = json.indexOf("}", valStartIndex);
+        int valEndIndex;
+        if (commaIndex == -1) valEndIndex = braceIndex;
+        else if (braceIndex == -1) valEndIndex = commaIndex;
+        else valEndIndex = min(commaIndex, braceIndex);
+        
+        if (valEndIndex == -1) valEndIndex = json.length();
+        String val = json.substring(valStartIndex, valEndIndex);
         val.trim();
         return val;
-    } else {
-        endIndex = json.indexOf("\"", startIndex + 1);
-        if (endIndex == -1) return "";
-        return json.substring(startIndex + 1, endIndex);
     }
 }
 
 // ── Hàm Callback nhận lệnh MQTT ─────────────────────────
 // Fix F-005: Dùng String thay VLA char message[length+1]
 void callback(char* topic, byte* payload, unsigned int length) {
-    String msgString = "";
+    String msgString;
+    msgString.reserve(length);
     for (unsigned int i = 0; i < length; i++) {
         msgString += (char)payload[i];
     }
@@ -159,9 +181,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
     } else if (command == "SERVO") {
         String angleStr = parseJsonField(msgString, "angle");
         if (angleStr.length() > 0) {
-            int angle = angleStr.toInt();
+            int angle = constrain(angleStr.toInt(), 0, 180);
             payloadServo.write(angle);
-            Serial.print("[CONTROL] Đã quay Servo góc: ");
+            Serial.print("[CONTROL] Da quay Servo goc: ");
             Serial.println(angle);
         }
     }
@@ -176,7 +198,7 @@ void connectWiFi() {
     WiFi.begin(const_cast<char*>(ssid), const_cast<char*>(password));
 
     int retry = 0;
-    while (WiFi.status() != WL_CONNECTED && retry < 30) {
+    while (WiFi.status() != WL_CONNECTED && retry < WIFI_MAX_RETRIES) {
         delay(500);
         Serial.print(".");
         retry++;
@@ -195,7 +217,7 @@ void connectWiFi() {
 // ── Kết nối MQTT ─────────────────────────────────────────
 void connectMQTT() {
     int retry = 0;
-    while (!client.connected() && retry < 5) {
+    while (!client.connected() && retry < MQTT_MAX_RETRIES) {
         Serial.print("[MQTT] Dang ket noi broker...");
 
         String clientId = "TuongHuy_BW16_" + String(random(0xffff), HEX);
@@ -204,11 +226,12 @@ void connectMQTT() {
             client.subscribe(topic_payload);
             Serial.print("[MQTT] Da subscribe: ");
             Serial.println(topic_payload);
+            break;
         } else {
             Serial.print(" That bai, rc=");
             Serial.print(client.state());
             Serial.println(" - Thu lai sau 3s...");
-            delay(3000);
+            delay(MQTT_RETRY_DELAY);
         }
         retry++;
     }
@@ -222,20 +245,20 @@ void setup() {
     Serial.println("==============================");
     Serial.println("  BW16 Drone IoT Payload");
     Serial.println("  DHT22 + MQ-135 + alert Node");
-    Serial.println("  v2.6 - Fixed Out-Of-Bounds Pin Bug & MQTT Blocking Mode");
+    Serial.println("  v3.0 - Full Audit & Optimization");
     Serial.println("==============================");
 
-    Serial.println("-> Cấu hình Buzzer (PA15)..."); delay(50);
+    Serial.println("-> Cau hinh Buzzer (PA14)..."); delay(50);
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, BUZZER_OFF);
     Serial.println("   [OK] Buzzer");
 
-    Serial.println("-> Cấu hình LED Đỏ (PA25)..."); delay(50);
+    Serial.println("-> Cau hinh LED Do (PA15)..."); delay(50);
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LED_OFF);
     Serial.println("   [OK] LED Đỏ");
 
-    Serial.println("-> Cấu hình LED Xanh (PA27)..."); delay(50);
+    Serial.println("-> Cau hinh LED Xanh (PA27)..."); delay(50);
     pinMode(LED_GREEN_PIN, OUTPUT);
     digitalWrite(LED_GREEN_PIN, LED_ON);
     Serial.println("   [OK] LED Xanh");
@@ -249,8 +272,7 @@ void setup() {
     pinMode(MQ135_PIN, INPUT);
 
     Serial.println("-> Khoi tao man hinh OLED...");
-    Wire.begin(); // Ameba RTL8720DN dùng mặc định SDA=PA26, SCL=PA25
-    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    if(!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
         Serial.println("[ERROR] SSD1306 allocation failed");
     } else {
         display.clearDisplay();
@@ -291,7 +313,7 @@ void setup() {
     wifiClient.setBlockingMode();
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
-    client.setKeepAlive(60);
+    client.setKeepAlive(MQTT_KEEPALIVE);
 
     Serial.println("[SYSTEM] Setup hoan tat!");
 }
@@ -321,18 +343,18 @@ void loop() {
     digitalWrite(TRIG_PIN, LOW);
     
     // 2. Đọc thời gian vọng (timeout 20000us tương đương ~3.4m)
-    long duration = pulseIn(ECHO_PIN, HIGH, 20000);
+    long duration = pulseIn(ECHO_PIN, HIGH, PULSE_TIMEOUT_US);
     if (duration == 0) {
         distance_cm = -1; // Không có vật cản gần
     } else {
         distance_cm = duration * 0.034 / 2;
     }
 
-    bool collision_alert = (distance_cm > 0 && distance_cm < 30);
+    bool collision_alert = (distance_cm > 0 && distance_cm < COLLISION_DIST_CM);
 
     // 3. Xử lý Chớp đèn / Còi báo va chạm (Non-blocking Blink 200ms)
     if (collision_alert) {
-        if (now - lastBlinkTime >= 200) {
+        if (now - lastBlinkTime >= BLINK_INTERVAL) {
             lastBlinkTime = now;
             collisionBlinkState = !collisionBlinkState;
         }
@@ -351,7 +373,7 @@ void loop() {
 
 
     // ── XỬ LÝ ĐỌC CẢM BIẾN MÔI TRƯỜNG & GỬI MQTT (Mỗi 2 giây) ──
-    bool is_alert = false;
+    // is_alert is now global `env_alert`
     if (now - lastMsg >= interval) {
         lastMsg = now;
 
@@ -367,18 +389,18 @@ void loop() {
         }
 
         // Đọc MQ-135 (ADC giá trị thô 0-4095)
-        int mq_raw = analogRead(MQ135_PIN);
+        mq_raw_val = analogRead(MQ135_PIN);
 
         // Xác định trạng thái cảnh báo tự động onboard
-        if (now > 30000) {
-            is_alert = (mq_raw > CO2_THRESHOLD);
+        if (now > MQ135_WARMUP_MS) {
+            env_alert = (mq_raw_val > CO2_THRESHOLD);
         }
 
         // ── ĐIỀU KHIỂN CÒI BUZZER (Ưu tiên: MQTT > Va Chạm > Tự động Môi trường) ──
         if (mqtt_buzzer_override) {
             digitalWrite(BUZZER_PIN, mqtt_buzzer_state ? BUZZER_ON : BUZZER_OFF);
-        } else if (!collision_alert) { // Chỉ gán theo Môi trường nếu không có va chạm
-            digitalWrite(BUZZER_PIN, is_alert ? BUZZER_ON : BUZZER_OFF);
+        } else if (!collision_alert) {
+            digitalWrite(BUZZER_PIN, env_alert ? BUZZER_ON : BUZZER_OFF);
         }
 
         // ── ĐIỀU KHIỂN ĐÈN LED MÔI TRƯỜNG (Ưu tiên MQTT > Tự động) ──
@@ -386,34 +408,29 @@ void loop() {
             digitalWrite(LED_PIN,       mqtt_led_state ? LED_ON : LED_OFF);
             digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LED_OFF : LED_ON);
         } else {
-            digitalWrite(LED_PIN,       is_alert ? LED_ON : LED_OFF);
-            digitalWrite(LED_GREEN_PIN, is_alert ? LED_OFF : LED_ON);
+            digitalWrite(LED_PIN,       env_alert ? LED_ON : LED_OFF);
+            digitalWrite(LED_GREEN_PIN, env_alert ? LED_OFF : LED_ON);
         }
 
-        // Đóng gói dữ liệu JSON
-        String payload = "{";
-        payload += "\"temp\":"     + String(temp_val, 1);
-        payload += ",\"humidity\":" + String(hum_val, 1);
-        payload += ",\"co2\":"     + String(mq_raw);
-        payload += ",\"alert\":"   + String(is_alert ? 1 : 0);
-        payload += ",\"distance\":" + String(distance_cm);
-        payload += ",\"rssi\":"    + String(WiFi.RSSI());
-        payload += ",\"dht_ok\":"  + String(dht_ok ? 1 : 0);
-        payload += "}";
+        // Đóng gói dữ liệu JSON (dùng snprintf tránh heap fragmentation)
+        char jsonBuf[256];
+        snprintf(jsonBuf, sizeof(jsonBuf),
+            "{\"temp\":%.1f,\"humidity\":%.1f,\"co2\":%d,\"alert\":%d,\"distance\":%ld,\"rssi\":%d,\"dht_ok\":%d}",
+            temp_val, hum_val, mq_raw_val, env_alert ? 1 : 0, distance_cm, (int)WiFi.RSSI(), dht_ok ? 1 : 0);
 
         // Publish lên MQTT broker
-        if (client.connected() && client.publish("drone/payload/sensors", payload.c_str())) {
+        if (client.connected() && client.publish(topic_sensors, jsonBuf)) {
             Serial.print("[SEND] ");
-            Serial.println(payload);
+            Serial.println(jsonBuf);
         } else {
             Serial.println("[SEND] Loi! Khong the publish len MQTT.");
         }
     }
 
     // ── Cập nhật màn hình OLED (5fps) ──
-    if (now - lastOLEDUpdate > oledInterval) {
+    if (now - lastOLEDUpdate >= oledInterval) {
         lastOLEDUpdate = now;
-        updateOLED(is_alert, collision_alert);
+        updateOLED(env_alert, collision_alert);
     }
 }
 
@@ -436,7 +453,7 @@ void updateOLED(bool env_alert, bool col_alert) {
     display.setCursor(0, 14);
     display.print("Temp: "); display.print(temp_val, 1); display.println(" C");
     display.print("Hum : "); display.print(hum_val, 1); display.println(" %");
-    display.print("CO2 : "); display.print(analogRead(MQ135_PIN)); display.println(" ADC");
+    display.print("CO2 : "); display.print(mq_raw_val); display.println(" ADC");
     display.print("Dist: "); 
     if (distance_cm > 0) { display.print(distance_cm); display.println(" cm"); }
     else { display.println("OUT / SAFE"); }

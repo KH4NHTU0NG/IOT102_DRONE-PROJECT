@@ -3,11 +3,11 @@
 # Bug fix #4: thêm restart: unless-stopped cho mọi service
 # Bug fix #5: thêm named volumes để persist data
 # ============================================================
-version: '3.8'
+# (Docker Compose v2 — không cần khai báo 'version')
 
 services:
   mosquitto:
-    image: eclipse-mosquitto:latest
+    image: eclipse-mosquitto:2.0
     container_name: iot_mqtt
     restart: unless-stopped
     ports:
@@ -32,7 +32,7 @@ services:
       - influxdb_data:/var/lib/influxdb2   # Bug fix #5: persist DB
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.0
     container_name: iot_grafana
     restart: unless-stopped
     ports:

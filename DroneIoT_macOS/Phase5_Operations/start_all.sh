@@ -30,7 +30,7 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 cd "$ROOT_DIR/Phase1_Docker"
-docker-compose up -d
+docker compose up -d
 echo "✅ Docker: iot_mqtt, iot_db, iot_grafana"
 sleep 10  # Chờ InfluxDB init
 

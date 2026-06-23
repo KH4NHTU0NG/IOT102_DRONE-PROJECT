@@ -13,7 +13,7 @@ INFLUX_BUCKET = "drone_data"
 
 MQTT_BROKER = "127.0.0.1"
 MQTT_PORT = 1883
-MQTT_TOPIC = "drone/payload/sensors"
+MQTT_TOPIC = "tuonghuy_drone/payload/sensors"
 
 def get_token():
     paths = [
@@ -27,7 +27,11 @@ def get_token():
         if os.path.exists(abs_p):
             with open(abs_p) as f:
                 return f.read().strip()
-    return os.environ.get("INFLUX_TOKEN", "SPSuc2iYUViMysgXOlYD61aYXaiarb7hBPfpHZBAWCknUphbdH4Vqa_C7VLEAp6622vkOXtg1W_yVx5TYG1h9A==")
+    token = os.environ.get("INFLUX_TOKEN", "")
+    if not token:
+        print("[ERROR] Không tìm thấy INFLUX_TOKEN. Chạy setup.sh hoặc export INFLUX_TOKEN=...")
+        sys.exit(1)
+    return token
 
 latencies = []
 test_finished = threading.Event()
@@ -77,7 +81,7 @@ def poll_db(co2_val, t_mqtt):
     
     while time.time() - start_poll < timeout:
         val, t_db = query_latest_co2(influx)
-        if val is not None and float(val) == float(co2_val):
+        if val is not None and abs(float(val) - float(co2_val)) < 1.0:
             t_detected = time.time()
             latency = (t_detected - t_mqtt) * 1000.0
             

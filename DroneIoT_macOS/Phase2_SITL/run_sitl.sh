@@ -5,7 +5,7 @@
 #
 # Mở đồng thời:
 #   - UDP 14550 cho QGroundControl (tự auto-detect)
-#   - TCP 5760 cho fusion.py
+#   - TCP 5763 cho fusion.py
 # ============================================================
 set -euo pipefail
 

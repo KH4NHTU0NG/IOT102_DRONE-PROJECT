@@ -493,7 +493,7 @@
 
     <!-- Footer -->
     <footer>
-        <p>Hệ thống IoT Drone Giám sát Môi trường — Cổng WebSocket 9001</p>
+        <p>Hệ thống IoT Drone Giám sát Môi trường — Cổng WebSocket 8000</p>
     </footer>
 </div>
 
@@ -513,14 +513,40 @@
     
     let client = null;
     let isConnected = false;
+    let userDisconnected = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer = null;
+    let logLineCount = 0;
+
+    // Cache DOM references (W-06: tránh gọi getElementById lặp trong hot path)
+    const tempEl     = document.getElementById('temp_value');
+    const humEl      = document.getElementById('hum_value');
+    const co2El      = document.getElementById('co2_value');
+    const alertEl    = document.getElementById('alert_value');
+    const rssiEl     = document.getElementById('rssi_value');
+    const distEl     = document.getElementById('distance_value');
+    const radarWarnEl = document.getElementById('radar_warning');
+    const statusBadge = document.getElementById('status_badge');
+    const statusText  = document.getElementById('status_text');
 
     // Bắt đầu kết nối
     function startConnection() {
         const host = hostInput.value.trim() || 'broker.hivemq.com';
-        const port = Number(portInput.value) || 8000;
+        
+        // Tự động phát hiện SSL dựa trên giao thức trang web (HTTPS -> useSSL)
+        const isHttps = window.location.protocol === 'https:';
+        let port = Number(portInput.value);
+        if (!port) {
+            // Nếu port trống, đặt mặc định dựa theo SSL: HiveMQ dùng 8884 cho SSL, 8000 cho non-SSL
+            port = (isHttps || host.includes("hivemq.com")) ? (isHttps ? 8884 : 8000) : 8000;
+        }
+        
+        // Nếu port là 8884 hoặc 443 hoặc trang dùng HTTPS, kích hoạt SSL
+        const useSSL = isHttps || port === 8884 || port === 443;
+
         const clientId = 'web_client_' + Math.random().toString(16).slice(2, 10);
 
-        addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ws://${host}:${port}/mqtt...`);
+        addLog(`[SYSTEM] Bắt đầu kết nối MQTT Broker tại ${useSSL ? 'wss' : 'ws'}://${host}:${port}/mqtt...`);
         
         try {
             const MQTTClient = (typeof Paho.MQTT !== "undefined") ? Paho.MQTT.Client : Paho.Client;
@@ -532,50 +558,65 @@
                 onSuccess: onConnect,
                 onFailure: onFailure,
                 keepAliveInterval: 60,
-                useSSL: false,
+                useSSL: useSSL,
                 mqttVersion: 4, // Bắt buộc dùng MQTT 3.1.1
                 reconnect: false
             });
         } catch (e) {
             addLog("[SYSTEM] Lỗi khởi tạo client: " + (e.message || e));
             updateUIConnected(false);
-            alert("Lỗi khởi tạo MQTT: " + (e.message || e));
         }
     }
 
     function toggleConnection() {
         if (client && isConnected) {
+            userDisconnected = true;
             addLog("[SYSTEM] Đang ngắt kết nối chủ động...");
             try {
                 client.disconnect();
             } catch (e) {}
+            client = null;
             updateUIConnected(false);
         } else {
+            userDisconnected = false;
+            reconnectAttempts = 0;
             startConnection();
         }
     }
 
     function updateUIConnected(connected) {
         isConnected = connected;
-        const badge = document.getElementById('status_badge');
-        const statusText = document.getElementById('status_text');
         
         if (connected) {
-            badge.className = "status-badge connected";
+            statusBadge.className = "status-badge connected";
             statusText.innerText = "Đã kết nối";
             btnConnect.innerText = "Ngắt Kết Nối";
             btnConnect.className = "btn btn-red";
         } else {
-            badge.className = "status-badge disconnected";
+            statusBadge.className = "status-badge disconnected";
             statusText.innerText = "Mất kết nối";
             btnConnect.innerText = "Kết Nối";
             btnConnect.className = "btn btn-blue";
+        }
+
+        // W-05: Disable/Enable tất cả control buttons khi mất/có kết nối
+        document.querySelectorAll('.card .btn:not(#btn_connect)').forEach(btn => {
+            btn.disabled = !connected;
+            btn.style.opacity = connected ? '1' : '0.4';
+            btn.style.pointerEvents = connected ? 'auto' : 'none';
+        });
+        const slider = document.getElementById('servo_slider');
+        if (slider) {
+            slider.disabled = !connected;
+            slider.style.opacity = connected ? '1' : '0.4';
         }
     }
 
     // Kết nối thành công
     function onConnect() {
         updateUIConnected(true);
+        reconnectAttempts = 0;
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         addLog("[MQTT] ✅ Kết nối WebSocket thành công!");
 
         // Subscribe các topics cần thiết
@@ -595,11 +636,20 @@
         }
     }
 
-    // Mất kết nối
+    // Mất kết nối — auto-reconnect (W-03)
     function onConnectionLost(responseObject) {
         updateUIConnected(false);
         if (responseObject.errorCode !== 0) {
             addLog("[MQTT] ⚠️  Mất kết nối WebSocket. Chi tiết: " + (responseObject.errorMessage || "Không rõ lỗi"));
+        }
+        // Auto-reconnect nếu không phải user chủ động ngắt
+        if (!userDisconnected) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+            addLog(`[SYSTEM] Tự động kết nối lại sau ${delay/1000}s (lần thử #${reconnectAttempts})...`);
+            reconnectTimer = setTimeout(() => {
+                startConnection();
+            }, delay);
         }
     }
 
@@ -616,14 +666,17 @@
             try {
                 const data = JSON.parse(payload);
 
-                // Fix W-002: Null-safe access
-                const temp = (data.temp != null) ? Number(data.temp).toFixed(1) : '--';
-                const hum  = (data.hum != null) ? Number(data.hum).toFixed(1) : '--';
+                // Fix W-002: Null-safe access & Support both data.humidity and data.hum
+                const tempVal = data.temp;
+                const humidityVal = data.humidity !== undefined ? data.humidity : data.hum;
+                
+                const temp = (tempVal != null && !isNaN(Number(tempVal))) ? Number(tempVal).toFixed(1) : '--';
+                const hum  = (humidityVal != null && !isNaN(Number(humidityVal))) ? Number(humidityVal).toFixed(1) : '--';
                 const co2  = (data.co2 != null) ? data.co2 : '--';
-
-                document.getElementById('temp_value').innerHTML = `${temp}<span>°C</span>`;
-                document.getElementById('hum_value').innerHTML  = `${hum}<span>%</span>`;
-                document.getElementById('co2_value').innerHTML  = `${co2}<span>ADC</span>`;
+                // W-02: Dùng textContent thay innerHTML để tránh XSS
+                tempEl.textContent = temp + '°C';
+                humEl.textContent  = hum + '%';
+                co2El.textContent  = co2 + ' ADC';
 
                 const alertEl = document.getElementById('alert_value');
                 if (data.alert === 1) {
@@ -639,20 +692,17 @@
                 }
 
                 if (data.rssi != null) {
-                    document.getElementById('rssi_value').innerHTML = `${data.rssi}<span>dBm</span>`;
+                    rssiEl.textContent = data.rssi + ' dBm';
                 }
 
                 // Xử lý Radar Va chạm (SRF05)
                 if (data.distance !== undefined) {
-                    let distEl = document.getElementById("distance_value");
-                    let radarWarnEl = document.getElementById("radar_warning");
-                    
                     if (data.distance === -1) {
-                        distEl.innerHTML = "> 3m <span>(Trống)</span>";
+                        distEl.textContent = '> 3m (Trống)';
                         distEl.className = "telemetry-val";
                         radarWarnEl.style.display = "none";
                     } else {
-                        distEl.innerHTML = data.distance + "<span> cm</span>";
+                        distEl.textContent = data.distance + ' cm';
                         if (data.distance > 0 && data.distance < 30) {
                             distEl.className = "telemetry-val radar-alert";
                             radarWarnEl.style.display = "block";
@@ -674,6 +724,15 @@
 
     // Gửi lệnh điều khiển bay sang Gateway (fusion.py)
     function sendFlightCommand(cmdName) {
+        if (!client || !isConnected) {
+            addLog(`[ERROR] Không thể gửi lệnh bay: Chưa kết nối MQTT Broker`);
+            return;
+        }
+        // W-04: Confirm dialog cho lệnh bay nguy hiểm
+        const dangerCmds = ['ARM', 'TAKEOFF', 'LAND', 'RTL'];
+        if (dangerCmds.includes(cmdName)) {
+            if (!confirm(`⚠️ Xác nhận gửi lệnh ${cmdName} đến Drone?`)) return;
+        }
         const payload = {
             command: cmdName,
             alt: cmdName === "TAKEOFF" ? 10.0 : 0.0,
@@ -688,6 +747,10 @@
 
     // Gửi lệnh điều khiển còi/LED sang BW16
     function sendPayloadCommand(cmdName) {
+        if (!client || !isConnected) {
+            addLog(`[ERROR] Không thể gửi lệnh payload: Chưa kết nối MQTT Broker`);
+            return;
+        }
         const payload = {
             command: cmdName,
             timestamp: Date.now()
@@ -705,6 +768,10 @@
     }
 
     function sendServoCommand(angle) {
+        if (!client || !isConnected) {
+            addLog(`[ERROR] Không thể gửi lệnh Servo: Chưa kết nối MQTT Broker`);
+            return;
+        }
         const payload = {
             command: "SERVO",
             angle: parseInt(angle),
@@ -726,16 +793,19 @@
 
         logConsole.value += `[${timeStr}] ${msg}\n`;
         logConsole.scrollTop = logConsole.scrollHeight;
+        logLineCount++;
 
-        // Giới hạn 200 dòng — dùng slice thay shift để tránh O(n) mỗi ký tự
-        const lines = logConsole.value.split('\n');
-        if (lines.length > 202) {
+        // Giới hạn 200 dòng — chỉ split khi vượt ngưỡng (W-07)
+        if (logLineCount > 202) {
+            const lines = logConsole.value.split('\n');
             logConsole.value = lines.slice(lines.length - 200).join('\n');
+            logLineCount = 200;
         }
     }
 
     function clearLogs() {
         logConsole.value = "";
+        logLineCount = 0;
     }
 </script>
 </body>

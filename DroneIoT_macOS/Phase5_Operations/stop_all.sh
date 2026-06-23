@@ -34,7 +34,7 @@ pkill -f "sim_vehicle.py" 2>/dev/null && echo "✅ Dừng SITL" || \
 echo ""
 echo "▶ Dừng Docker containers..."
 cd "$ROOT_DIR/Phase1_Docker"
-docker-compose down
+docker compose down
 echo "✅ Docker containers đã dừng."
 
 echo ""

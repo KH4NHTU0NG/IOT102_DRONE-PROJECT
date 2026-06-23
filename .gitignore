@@ -10,6 +10,7 @@ env/
 
 # Sensitive data
 .influx_token
+secrets.h
 
 # Logs
 *.log

@@ -24,7 +24,7 @@ echo "✅ Docker Engine đang chạy."
 echo ""
 echo "▶ Khởi động containers (mosquitto, influxdb, grafana)..."
 cd "$SCRIPT_DIR"
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo "▶ Chờ InfluxDB khởi động hoàn toàn (15 giây)..."
@@ -39,7 +39,7 @@ RUNNING=$(docker ps --filter "name=iot_" --filter "status=running" | grep -c "io
 if [ "$RUNNING" -lt 3 ]; then
     echo ""
     echo "❌ Có container chưa Up. Xem log lỗi:"
-    docker-compose logs --tail=20
+    docker compose logs --tail=20
     exit 1
 fi
 echo ""
@@ -51,17 +51,22 @@ echo "▶ Lấy InfluxDB API Token..."
 sleep 5  # Đợi influxdb init xong hoàn toàn
 TOKEN=$(docker exec iot_db influx auth list \
     --user admin \
-    --hide-headers 2>/dev/null \
-    | awk '{print $4}' \
-    | head -1)
+    --json 2>/dev/null \
+    | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['token'])" 2>/dev/null || echo "")
+
+# Nếu không lấy được token (ví dụ do DB đã khởi tạo từ trước), khôi phục từ file cũ nếu tồn tại
+if [ -z "$TOKEN" ] && [ -f "$SCRIPT_DIR/../Phase4_Fusion/.influx_token" ]; then
+    TOKEN=$(cat "$SCRIPT_DIR/../Phase4_Fusion/.influx_token")
+    echo "  → Khôi phục InfluxDB Token từ file đã lưu trước đó."
+fi
 
 if [ -z "$TOKEN" ]; then
     echo "⚠️  Không lấy được token tự động. Thử lấy thủ công:"
-    echo "   docker exec iot_db influx auth list --user admin --hide-headers | awk '{print \$4}'"
+    echo "   docker exec iot_db influx auth list --user admin"
 else
     echo ""
     echo "╔══════════════════════════════════════════════════════╗"
-    echo "║  InfluxDB Token (copy ngay, dán vào fusion.py):     ║"
+    echo "║  InfluxDB Token:                                     ║"
     echo "╠══════════════════════════════════════════════════════╣"
     echo "║  $TOKEN"
     echo "╚══════════════════════════════════════════════════════╝"

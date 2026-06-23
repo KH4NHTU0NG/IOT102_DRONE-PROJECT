@@ -11,9 +11,12 @@ INFLUX_URL = "http://localhost:8086"
 INFLUX_ORG = "drone_org"
 INFLUX_BUCKET = "drone_data"
 
-MQTT_BROKER = "127.0.0.1"
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
-MQTT_TOPIC = "drone/payload/sensors"
+MQTT_TOPIC = "tuonghuy_drone/payload/sensors"
+
+executor = None
+influx_client = None
 
 def get_token():
     paths = [
@@ -56,7 +59,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
-    global latencies
+    global latencies, executor, influx_client
     t_mqtt = time.time()
     try:
         data = json.loads(msg.payload.decode("utf-8"))
@@ -64,16 +67,13 @@ def on_message(client, userdata, msg):
         if co2_val is None:
             return
         
-        # Start a thread to poll InfluxDB for this co2 value
-        threading.Thread(target=poll_db, args=(co2_val, t_mqtt), daemon=True).start()
+        if executor is not None:
+            executor.submit(poll_db, co2_val, t_mqtt, influx_client)
     except Exception as e:
         print(f"[TEST] Lỗi MQTT callback: {e}")
 
-def poll_db(co2_val, t_mqtt):
+def poll_db(co2_val, t_mqtt, influx):
     global latencies
-    token = get_token()
-    influx = InfluxDBClient(url=INFLUX_URL, token=token, org=INFLUX_ORG)
-    
     start_poll = time.time()
     timeout = 10.0 # 10 seconds timeout
     
@@ -92,8 +92,6 @@ def poll_db(co2_val, t_mqtt):
                     test_finished.set()
             break
         time.sleep(0.2) # Poll every 200ms
-        
-    influx.close()
 
 def main():
     print("=" * 60)
@@ -114,9 +112,21 @@ def main():
         
     threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
     
+    # Khởi động thread pool executor và shared InfluxDB client
+    import concurrent.futures
+    global executor, influx_client
+    token = get_token()
+    influx_client = InfluxDBClient(url=INFLUX_URL, token=token, org=INFLUX_ORG)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+
     # Wait for 20 samples or timeout
     finished = test_finished.wait(timeout=60.0)
     mqtt_client.disconnect()
+
+    if executor is not None:
+        executor.shutdown(wait=False)
+    if influx_client is not None:
+        influx_client.close()
     
     with lock:
         if len(latencies) < 5:

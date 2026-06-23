@@ -5,9 +5,10 @@ import sys
 import json
 import threading
 import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
 from pymavlink import mavutil
 
-MQTT_BROKER = "127.0.0.1"
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 SITL_HOST = "127.0.0.1"
 SITL_PORT = 5763
@@ -17,17 +18,17 @@ flight_received = None
 received_event = threading.Event()
 
 def on_connect(client, userdata, flags, reason_code, properties):
-    client.subscribe("drone/control/payload")
-    client.subscribe("drone/control/flight")
+    client.subscribe("tuonghuy_drone/control/payload")
+    client.subscribe("tuonghuy_drone/control/flight")
 
 def on_message(client, userdata, msg):
     global payload_received, flight_received
     topic = msg.topic
     payload = msg.payload.decode("utf-8")
     
-    if topic == "drone/control/payload":
+    if topic == "tuonghuy_drone/control/payload":
         payload_received = payload
-    elif topic == "drone/control/flight":
+    elif topic == "tuonghuy_drone/control/flight":
         flight_received = payload
         
     received_event.set()
@@ -50,13 +51,9 @@ def test_1_payload_command():
     payload_received = None
     received_event.clear()
     
-    pub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    pub_client.connect(MQTT_BROKER, MQTT_PORT)
-    
-    # Gửi lệnh BẬT CÒI
+    # Gửi lệnh BẬT CÒI sử dụng publish.single để đồng bộ an toàn
     cmd = {"command": "BUZZER_ON", "timestamp": int(time.time()*1000)}
-    pub_client.publish("drone/control/payload", json.dumps(cmd))
-    pub_client.disconnect()
+    publish.single("tuonghuy_drone/control/payload", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
     
     # Chờ nhận lại qua subscriber
     success = received_event.wait(timeout=3.0)
@@ -75,13 +72,9 @@ def test_2_flight_command():
     flight_received = None
     received_event.clear()
     
-    pub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    pub_client.connect(MQTT_BROKER, MQTT_PORT)
-    
-    # Gửi lệnh ARM lên MQTT
+    # Gửi lệnh ARM lên MQTT sử dụng publish.single để đồng bộ an toàn
     cmd = {"command": "ARM", "timestamp": int(time.time()*1000)}
-    pub_client.publish("drone/control/flight", json.dumps(cmd))
-    pub_client.disconnect()
+    publish.single("tuonghuy_drone/control/flight", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
     
     # Chờ nhận tin nhắn MQTT
     received_event.wait(timeout=3.0)
@@ -130,6 +123,7 @@ def main():
     print("=" * 60)
     
     sub = run_mqtt_subscriber()
+    time.sleep(1.0) # Đợi subscriber kết nối ổn định tới broker
     
     t1 = test_1_payload_command()
     t2 = test_2_flight_command()
