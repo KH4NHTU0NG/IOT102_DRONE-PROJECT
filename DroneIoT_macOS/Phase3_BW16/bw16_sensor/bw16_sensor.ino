@@ -12,6 +12,9 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <AmebaServo.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // ── Cấu hình kết nối ─────────────────────────────────────
 // !! Sửa SSID và PASSWORD thành WiFi của bạn !!
@@ -21,22 +24,29 @@ const char* mqtt_server = "192.168.1.156";  // IP máy Mac chạy Mosquitto brok
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
-// QUAN TRỌNG: Không dùng PA12 (TX Log Console), PA30 (JTAG), PA28 (SWD)
-#define DHT_PIN         PA26   // Chân DATA của DHT22
+// ── Pin definitions ───────────────────────────────────────
+// Màn hình OLED I2C bắt buộc sử dụng PA25 (SCL) và PA26 (SDA)
+#define DHT_PIN         PA27   // Chân DATA của DHT22 (Dời từ PA26)
 #define DHT_TYPE        DHT22  // Loại cảm biến DHT22
-#define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas) - Đang cắm thực tế ở đây
+#define MQ135_PIN       PB3    // Chân đọc ADC (Khí gas)
 
-#define BUZZER_PIN      PA14   // Chân điều khiển Còi Buzzer (Đổi từ PA15 sang PA14 để chống hú lúc boot)
+#define BUZZER_PIN      PA14   // Chân điều khiển Còi Buzzer
 #define LED_PIN         PA15   // Đèn LED Đỏ (Cảnh báo Môi trường)
-#define LED_GREEN_PIN   PA27   // Đèn LED Xanh (Trạng thái an toàn)
+// Đã loại bỏ LED_GREEN_PIN để tiết kiệm chân
 
 // Cấu hình Cảm biến siêu âm SRF05 (Radar Va Chạm)
 #define TRIG_PIN        PB2    // Chân phát sóng âm
-#define ECHO_PIN        PA13   // Chân nhận sóng âm
-#define COLLISION_LED_PIN PB1  // Đèn LED riêng biệt báo va chạm (Vàng hoặc Đỏ 2)
+#define ECHO_PIN        PB1    // Chân nhận sóng âm (Dời từ PA13)
+#define COLLISION_LED_PIN PA12 // Đèn LED riêng biệt báo va chạm (Dời từ PB1)
 
 // Cấu hình Động cơ Servo thả hàng
-#define SERVO_PIN       PA25   // Chân PWM điều khiển góc Servo (AmebaServo CHỈ hỗ trợ PA25, PA26, PA13, PA12)
+#define SERVO_PIN       PA13   // Chân PWM điều khiển góc Servo (Dời từ PA25 để nhường I2C)
+
+// Cấu hình màn hình OLED
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Cấu hình mức tích cực (Active Level)
 // Nếu còi/đèn bị ngược (bấm Bật thì Tắt, bấm Tắt thì Bật), hãy đổi HIGH thành LOW
@@ -65,11 +75,17 @@ DHT          dht(DHT_PIN, DHT_TYPE);
 AmebaServo   payloadServo;
 
 unsigned long lastMsg = 0;
+unsigned long lastOLEDUpdate = 0;
 const long    interval = 2000;   // Gửi dữ liệu MQTT mỗi 2 giây
+const long    oledInterval = 200; // Cập nhật màn hình mỗi 200ms (5fps)
 
 // Biến cho Radar Va chạm (non-blocking)
 long  distance_cm = -1;
 unsigned long lastBlinkTime = 0;
+
+// Biến lưu trữ dữ liệu cảm biến toàn cục cho OLED
+float temp_val = 0.0;
+float hum_val  = 0.0;
 bool  collisionBlinkState = false;
 
 // ── Hàm trích xuất giá trị JSON đơn giản ────────────────
@@ -215,25 +231,29 @@ void setup() {
     digitalWrite(LED_PIN, LED_OFF);
     Serial.println("   [OK] LED Đỏ");
 
-    Serial.println("-> Cấu hình LED Xanh (PA27)..."); delay(50);
-    pinMode(LED_GREEN_PIN, OUTPUT);
-    digitalWrite(LED_GREEN_PIN, LED_ON);
-    Serial.println("   [OK] LED Xanh");
-
-    Serial.println("-> Cấu hình SRF05 & LED Va Chạm..."); delay(50);
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
+    
     pinMode(COLLISION_LED_PIN, OUTPUT);
     digitalWrite(COLLISION_LED_PIN, LED_OFF);
-    Serial.println("   [OK] Radar System");
+    
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+    pinMode(MQ135_PIN, INPUT);
 
-    Serial.println("-> Cấu hình Cảm biến Khí MQ-135..."); delay(50);
-    pinMode(MQ135_PIN, INPUT); // Bắt buộc set INPUT cho chân ADC trên dòng Ameba
-    Serial.println("   [OK] MQ-135 ADC");
+    Serial.println("-> Khoi tao man hinh OLED...");
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("[ERROR] SSD1306 allocation failed");
+    } else {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0,10);
+        display.println("Drone IoT Booting...");
+        display.display();
+    }
 
-    Serial.println("-> Cấu hình Động cơ Servo..."); delay(50);
+    Serial.println("-> Cau hinh Dong co Servo...");
     payloadServo.attach(SERVO_PIN);
-    payloadServo.write(0); // Khởi động ở góc 0 độ (Đóng cửa)
+    payloadServo.write(0); // Khởi tạo ở góc 0 độ (Khóa hàng)
     Serial.println("   [OK] Servo Payload");
 
     Serial.println("[INIT] GPIO OK");
@@ -305,12 +325,15 @@ void loop() {
         if (now - lastBlinkTime >= 200) {
             lastBlinkTime = now;
             collisionBlinkState = !collisionBlinkState;
-            digitalWrite(COLLISION_LED_PIN, collisionBlinkState ? LED_ON : LED_OFF);
+        }
+        // Biến toàn cục distance_cm, is_alert, collision_alert sẽ được sử dụng cho OLED
+
+        // ── ĐIỀU KHIỂN ĐÈN LED VA CHẠM ──
+        digitalWrite(COLLISION_LED_PIN, collisionBlinkState ? LED_ON : LED_OFF);
             
-            // Còi hú theo nhịp nếu không bị Web chèn quyền
-            if (!mqtt_buzzer_override) {
-                digitalWrite(BUZZER_PIN, collisionBlinkState ? BUZZER_ON : BUZZER_OFF);
-            }
+        // Còi hú theo nhịp nếu không bị Web chèn quyền
+        if (!mqtt_buzzer_override) {
+            digitalWrite(BUZZER_PIN, collisionBlinkState ? BUZZER_ON : BUZZER_OFF);
         }
     } else {
         digitalWrite(COLLISION_LED_PIN, LED_OFF);
@@ -318,20 +341,18 @@ void loop() {
 
 
     // ── XỬ LÝ ĐỌC CẢM BIẾN MÔI TRƯỜNG & GỬI MQTT (Mỗi 2 giây) ──
+    bool is_alert = false;
     if (now - lastMsg >= interval) {
         lastMsg = now;
 
         // Đọc DHT22 (Nhiệt độ, Độ ẩm)
-        float temp = dht.readTemperature();
-        float hum  = dht.readHumidity();
+        temp_val = dht.readTemperature();
+        hum_val  = dht.readHumidity();
 
-        // Fix F-002: Không dùng delay() trong loop — thử 1 lần rồi thôi
-        // Fix F-003: Gán 0.0 khi lỗi (không phải -1.0) để UI hiển thị đúng
         bool dht_ok = true;
-        if (isnan(temp) || isnan(hum)) {
-            Serial.println("[DHT22] Loi doc cam bien! Kiem tra chan PA_26.");
-            temp   = 0.0;
-            hum    = 0.0;
+        if (isnan(temp_val) || isnan(hum_val)) {
+            temp_val   = 0.0;
+            hum_val    = 0.0;
             dht_ok = false;
         }
 
@@ -339,8 +360,6 @@ void loop() {
         int mq_raw = analogRead(MQ135_PIN);
 
         // Xác định trạng thái cảnh báo tự động onboard
-        // Bỏ qua cảnh báo trong 30 giây đầu tiên để chờ cảm biến MQ-135 làm nóng
-        bool is_alert = false;
         if (now > 30000) {
             is_alert = (mq_raw > CO2_THRESHOLD);
         }
@@ -355,16 +374,14 @@ void loop() {
         // ── ĐIỀU KHIỂN ĐÈN LED MÔI TRƯỜNG (Ưu tiên MQTT > Tự động) ──
         if (mqtt_led_override) {
             digitalWrite(LED_PIN,       mqtt_led_state ? LED_ON : LED_OFF);
-            digitalWrite(LED_GREEN_PIN, mqtt_led_state ? LED_OFF : LED_ON);
         } else {
             digitalWrite(LED_PIN,       is_alert ? LED_ON : LED_OFF);
-            digitalWrite(LED_GREEN_PIN, is_alert ? LED_OFF : LED_ON);
         }
 
         // Đóng gói dữ liệu JSON
         String payload = "{";
-        payload += "\"temp\":"     + String(temp, 1);
-        payload += ",\"humidity\":" + String(hum, 1);
+        payload += "\"temp\":"     + String(temp_val, 1);
+        payload += ",\"humidity\":" + String(hum_val, 1);
         payload += ",\"co2\":"     + String(mq_raw);
         payload += ",\"alert\":"   + String(is_alert ? 1 : 0);
         payload += ",\"distance\":" + String(distance_cm);
@@ -380,4 +397,48 @@ void loop() {
             Serial.println("[SEND] Loi! Khong the publish len MQTT.");
         }
     }
+
+    // ── Cập nhật màn hình OLED (5fps) ──
+    if (now - lastOLEDUpdate > oledInterval) {
+        lastOLEDUpdate = now;
+        updateOLED(is_alert, collision_alert);
+    }
+}
+
+// ── Hàm vẽ giao diện OLED ──
+void updateOLED(bool env_alert, bool col_alert) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    
+    // Header (Trạng thái mạng)
+    display.setCursor(0, 0);
+    display.print("WIFI:");
+    display.print(WiFi.status() == WL_CONNECTED ? "OK" : "NO");
+    display.print(" MQTT:");
+    display.print(client.connected() ? "OK" : "NO");
+    
+    display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+    
+    // Dữ liệu cảm biến
+    display.setCursor(0, 14);
+    display.print("Temp: "); display.print(temp_val, 1); display.println(" C");
+    display.print("Hum : "); display.print(hum_val, 1); display.println(" %");
+    display.print("CO2 : "); display.print(analogRead(MQ135_PIN)); display.println(" ADC");
+    display.print("Dist: "); 
+    if (distance_cm > 0) { display.print(distance_cm); display.println(" cm"); }
+    else { display.println("OUT / SAFE"); }
+    
+    // Khung cảnh báo (Footer)
+    display.drawLine(0, 50, 128, 50, SSD1306_WHITE);
+    display.setCursor(0, 54);
+    if (col_alert) {
+        display.print("! COLLISION ALERT !");
+    } else if (env_alert) {
+        display.print("! GAS/ENV ALERT !");
+    } else {
+        display.print("SYSTEM NORMAL");
+    }
+    
+    display.display();
 }
