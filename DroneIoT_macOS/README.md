@@ -1,6 +1,6 @@
 # Drone IoT — Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
 
-> **Phiên bản v3.0** — Full Audit & Optimization | 24/06/2026
+> **Phiên bản v3.1** — UI Redesign + Script Guard | 24/06/2026
 
 Dự án IoT tích hợp Board **Ameba BW16 (RTL8720DN)** với cụm cảm biến môi trường, radar va chạm và Servo thả hàng, kết nối qua **MQTT** về máy chủ Python Fusion Gateway trên macOS và Windows. Dữ liệu được lưu vào **InfluxDB** (Docker), hiển thị trực quan trên **Grafana** và điều khiển qua **Web Control Dashboard**.
 
@@ -114,21 +114,28 @@ bash setup_venv.sh
 
 ## Khởi Động Hàng Ngày
 
+> ⚠️ **Quan trọng:** Tất cả lệnh bên dưới phải chạy từ thư mục `DroneIoT_macOS/`.
+
 ```bash
+# Vào đúng thư mục gốc trước
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+
 # Một lệnh khởi động toàn bộ hệ thống
 bash Phase5_Operations/start_all.sh
 ```
 
-Hoặc thủ công từng bước:
+Hoặc thủ công từng bước (cũng chạy từ `DroneIoT_macOS/`):
 
 ```bash
-# 1. Docker
-cd Phase1_Docker && docker compose up -d
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 
-# 2. SITL (terminal mới)
+# 1. Docker
+cd Phase1_Docker && docker compose up -d && cd ..
+
+# 2. SITL (mở Terminal mới)
 cd Phase2_SITL && bash run_sitl.sh
 
-# 3. Fusion Gateway
+# 3. Fusion Gateway (Terminal khác)
 cd Phase4_Fusion
 source drone_env/bin/activate
 python3 fusion.py
@@ -169,6 +176,8 @@ cd DroneIoT_macOS  # Hoặc DroneIoT_Windows
 ## Dừng Hệ Thống
 
 ```bash
+# Từ trong DroneIoT_macOS/
+cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
 bash Phase5_Operations/stop_all.sh
 
 # Hoặc thủ công
@@ -179,6 +188,26 @@ cd Phase1_Docker && docker compose down
 ---
 
 ## Changelog
+
+### v3.1 — 24/06/2026 (UI Redesign + Script Fix)
+
+**Web Dashboard**
+- 🎨 Thiết kế lại giao diện: Engineering UI thuần túy, không có dấu hiệu AI vibe design
+- Font: Inter (UI) + JetBrains Mono (data/log)
+- Bảng màu neutral: `#f0f2f5` nền, white card, `#d9dde4` border
+- Layout 2 cột (Telemetry | Flight+Payload) + hàng dưới (Servo + MQTT config)
+- Button system: primary/danger/success/warning/secondary/ghost
+
+**Scripts**
+- 🐛 **FIX S-01**: Thêm guard kiểm tra thư mục vào `start_all.sh` — in hướng dẫn rõ ràng nếu chạy sai vị trí
+- 🐛 **FIX S-02**: Tương tự cho `stop_all.sh`
+- 📝 Thêm comment đầu file hướng dẫn cách chạy đúng
+
+**README**
+- 📝 Bổ sung warning "phải chạy từ DroneIoT_macOS/" ở mọi section có lệnh script
+- 📝 Thêm lệnh `cd` đầy đủ đường dẫn vào tất cả code block
+
+---
 
 ### v3.0 — 24/06/2026 (Full Audit & Optimization)
 
@@ -230,6 +259,7 @@ cd Phase1_Docker && docker compose down
 
 | Triệu chứng | Nguyên nhân | Giải pháp |
 |:------------|:------------|:----------|
+| `No such file or directory` khi chạy script | Đang ở sai thư mục | `cd DroneIoT_macOS` trước, rồi `bash Phase5_Operations/start_all.sh` |
 | Serial Monitor in `Error amb_ard_pin_check_fun` | `Wire.begin()` bị gọi 2 lần | Đã sửa trong v2.6 |
 | OLED không hiển thị cảnh báo gas | `is_alert` scoping sai | Đã sửa trong v3.0 |
 | Web không kết nối được MQTT | CDN Paho sai filename | Đã sửa trong v3.0 |

@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================
 # stop_all.sh — macOS Phase 5: Dừng toàn bộ hệ thống
+#
+# Cách chạy đúng:
+#   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+#   bash Phase5_Operations/stop_all.sh
 # ============================================================
 set -euo pipefail
 
+# Tự động detect ROOT_DIR từ vị trí script
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Guard: kiểm tra cấu trúc thư mục
+if [ ! -d "$ROOT_DIR/Phase1_Docker" ]; then
+    echo "❌ Không tìm thấy cấu trúc dự án tại: $ROOT_DIR"
+    echo "   Hãy chạy: bash Phase5_Operations/stop_all.sh (từ trong DroneIoT_macOS/)"
+    exit 1
+fi
 
 echo "━━━ Drone IoT — Dừng toàn bộ hệ thống ━━━"
 echo ""

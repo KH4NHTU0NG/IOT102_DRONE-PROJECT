@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # ============================================================
 # start_all.sh — macOS Phase 5: Khởi động toàn bộ hệ thống
-# Tuân theo đúng thứ tự khởi động đã kiểm chứng
+# Thứ tự: Docker → BW16 → SITL → Fusion → QGC
+#
+# Cách chạy đúng:
+#   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+#   bash Phase5_Operations/start_all.sh
 # ============================================================
 set -euo pipefail
 
+# Tự động detect ROOT_DIR từ vị trí script (luôn đúng dù chạy từ đâu)
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Guard: kiểm tra cấu trúc thư mục hợp lệ
+if [ ! -d "$ROOT_DIR/Phase1_Docker" ] || [ ! -d "$ROOT_DIR/Phase4_Fusion" ]; then
+    echo "❌ Không tìm thấy cấu trúc dự án tại: $ROOT_DIR"
+    echo ""
+    echo "   Hãy chạy script từ thư mục DroneIoT_macOS:"
+    echo "   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS"
+    echo "   bash Phase5_Operations/start_all.sh"
+    exit 1
+fi
 
 echo "╔══════════════════════════════════════════════════╗"
 echo "║       Drone IoT — Start All (macOS)              ║"
 echo "║  Thứ tự: Docker → BW16 → SITL → Fusion → QGC   ║"
 echo "╚══════════════════════════════════════════════════╝"
+echo "  ROOT: $ROOT_DIR"
 echo ""
 
 # ── Dọn dẹp tiến trình cũ ─────────────────────────────────
