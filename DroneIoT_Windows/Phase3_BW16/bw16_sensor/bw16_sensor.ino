@@ -248,6 +248,7 @@ void setup() {
     pinMode(MQ135_PIN, INPUT);
 
     Serial.println("-> Khoi tao man hinh OLED...");
+    Wire.begin(PA26, PA25); // SDA = PA26, SCL = PA25
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Serial.println("[ERROR] SSD1306 allocation failed");
     } else {
