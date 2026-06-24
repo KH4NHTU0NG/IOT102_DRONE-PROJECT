@@ -30,10 +30,10 @@ INFLUX_BUCKET = "drone_data"
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT   = 1883
 
-TOPIC_SENSORS     = "tuonghuy_drone/payload/sensors"
-TOPIC_FLIGHT_CMD  = "tuonghuy_drone/control/flight"
-TOPIC_PAYLOAD_CMD = "tuonghuy_drone/control/payload"  # Thêm: lắng nghe để log/forward
-TOPIC_STATUS      = "tuonghuy_drone/status/gateway"   # Thêm: gửi ACK về web
+TOPIC_SENSORS     = "iot102_drone/payload/sensors"
+TOPIC_FLIGHT_CMD  = "iot102_drone/control/flight"
+TOPIC_PAYLOAD_CMD = "iot102_drone/control/payload"  # Thêm: lắng nghe để log/forward
+TOPIC_STATUS      = "iot102_drone/status/gateway"   # Thêm: gửi ACK về web
 
 SITL_HOST     = "127.0.0.1"
 SITL_PORT     = 5763  # Cổng MAVProxy chuyển tiếp ra TCP

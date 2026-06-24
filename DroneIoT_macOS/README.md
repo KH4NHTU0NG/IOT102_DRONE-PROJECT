@@ -1,6 +1,6 @@
 # Drone IoT — Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
 
-> **Phiên bản v3.1** — UI Redesign + Script Guard | 24/06/2026
+> **Phiên bản v3.2** — Bug Fixes + Privacy Cleanup | 24/06/2026
 
 Dự án IoT tích hợp Board **Ameba BW16 (RTL8720DN)** với cụm cảm biến môi trường, radar va chạm và Servo thả hàng, kết nối qua **MQTT** về máy chủ Python Fusion Gateway trên macOS và Windows. Dữ liệu được lưu vào **InfluxDB** (Docker), hiển thị trực quan trên **Grafana** và điều khiển qua **Web Control Dashboard**.
 
@@ -118,7 +118,7 @@ bash setup_venv.sh
 
 ```bash
 # Vào đúng thư mục gốc trước
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+cd <đường dẫn đến DroneIoT_macOS>
 
 # Một lệnh khởi động toàn bộ hệ thống
 bash Phase5_Operations/start_all.sh
@@ -127,7 +127,7 @@ bash Phase5_Operations/start_all.sh
 Hoặc thủ công từng bước (cũng chạy từ `DroneIoT_macOS/`):
 
 ```bash
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+cd <đường dẫn đến DroneIoT_macOS>
 
 # 1. Docker
 cd Phase1_Docker && docker compose up -d && cd ..
@@ -177,7 +177,7 @@ cd DroneIoT_macOS  # Hoặc DroneIoT_Windows
 
 ```bash
 # Từ trong DroneIoT_macOS/
-cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+cd <đường dẫn đến DroneIoT_macOS>
 bash Phase5_Operations/stop_all.sh
 
 # Hoặc thủ công
@@ -238,7 +238,7 @@ cd Phase1_Docker && docker compose down
 - ⚡ **OPT W-07**: `addLog()` chỉ split khi cần — O(1) thay vì O(n) mỗi lần log
 
 **Infrastructure**
-- 🔧 **I-01**: Đồng bộ MQTT topics Windows → `tuonghuy_drone/*`
+- 🔧 **I-01**: Đồng bộ MQTT topics Windows → `iot102_drone/*`
 - 🔒 **I-02**: Xóa hardcoded InfluxDB token trong test files
 - 🔧 **I-03**: Pin Docker versions Windows: `mosquitto:2.0`, `grafana:10.4.0`
 - 🐛 **I-04**: Fix float comparison `==` → `abs() < 1.0` trong Windows test_latency.py
@@ -246,7 +246,7 @@ cd Phase1_Docker && docker compose down
 
 ### v2.6 — 23/06/2026
 - Fix OLED Double Wire.begin hang (Incorrect pin: 26)
-- Fix BW16 tự động nhận mạng TuongHuy
+- Fix BW16 auto-reconnect WiFi
 
 ### v2.5 — 22/06/2026
 - Tích hợp SITL ArduPilot với MAVLink TCP
@@ -302,5 +302,5 @@ DroneIoT_macOS/
 
 ---
 
-> **Tác giả:** TuongHuy — IOT102 Drone Project  
-> **Môi trường:** macOS Apple Silicon M-series + ArduPilot SITL + HiveMQ Public Broker
+> **Tác giả:** IOT102 Drone Project — Team  
+> **Môi trường:** macOS Apple Silicon / Windows + ArduPilot SITL + HiveMQ Public Broker

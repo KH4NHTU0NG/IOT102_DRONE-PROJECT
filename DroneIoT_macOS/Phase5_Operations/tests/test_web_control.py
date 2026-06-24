@@ -18,17 +18,17 @@ flight_received = None
 received_event = threading.Event()
 
 def on_connect(client, userdata, flags, reason_code, properties):
-    client.subscribe("tuonghuy_drone/control/payload")
-    client.subscribe("tuonghuy_drone/control/flight")
+    client.subscribe("iot102_drone/control/payload")
+    client.subscribe("iot102_drone/control/flight")
 
 def on_message(client, userdata, msg):
     global payload_received, flight_received
     topic = msg.topic
     payload = msg.payload.decode("utf-8")
     
-    if topic == "tuonghuy_drone/control/payload":
+    if topic == "iot102_drone/control/payload":
         payload_received = payload
-    elif topic == "tuonghuy_drone/control/flight":
+    elif topic == "iot102_drone/control/flight":
         flight_received = payload
         
     received_event.set()
@@ -53,7 +53,7 @@ def test_1_payload_command():
     
     # Gửi lệnh BẬT CÒI sử dụng publish.single để đồng bộ an toàn
     cmd = {"command": "BUZZER_ON", "timestamp": int(time.time()*1000)}
-    publish.single("tuonghuy_drone/control/payload", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
+    publish.single("iot102_drone/control/payload", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
     
     # Chờ nhận lại qua subscriber
     success = received_event.wait(timeout=3.0)
@@ -74,7 +74,7 @@ def test_2_flight_command():
     
     # Gửi lệnh ARM lên MQTT sử dụng publish.single để đồng bộ an toàn
     cmd = {"command": "ARM", "timestamp": int(time.time()*1000)}
-    publish.single("tuonghuy_drone/control/flight", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
+    publish.single("iot102_drone/control/flight", payload=json.dumps(cmd), hostname=MQTT_BROKER, port=MQTT_PORT)
     
     # Chờ nhận tin nhắn MQTT
     received_event.wait(timeout=3.0)

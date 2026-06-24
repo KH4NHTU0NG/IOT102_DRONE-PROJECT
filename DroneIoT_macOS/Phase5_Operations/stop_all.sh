@@ -3,7 +3,7 @@
 # stop_all.sh — macOS Phase 5: Dừng toàn bộ hệ thống
 #
 # Cách chạy đúng:
-#   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+#   cd <đường dẫn đến DroneIoT_macOS>
 #   bash Phase5_Operations/stop_all.sh
 # ============================================================
 set -euo pipefail

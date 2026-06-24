@@ -4,7 +4,7 @@
 # Thứ tự: Docker → BW16 → SITL → Fusion → QGC
 #
 # Cách chạy đúng:
-#   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS
+#   cd <đường dẫn đến DroneIoT_macOS>
 #   bash Phase5_Operations/start_all.sh
 # ============================================================
 set -euo pipefail
@@ -17,7 +17,7 @@ if [ ! -d "$ROOT_DIR/Phase1_Docker" ] || [ ! -d "$ROOT_DIR/Phase4_Fusion" ]; the
     echo "❌ Không tìm thấy cấu trúc dự án tại: $ROOT_DIR"
     echo ""
     echo "   Hãy chạy script từ thư mục DroneIoT_macOS:"
-    echo "   cd ~/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS"
+    echo "   cd <đường dẫn đến DroneIoT_macOS>"
     echo "   bash Phase5_Operations/start_all.sh"
     exit 1
 fi

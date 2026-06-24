@@ -112,7 +112,7 @@ def test_scenario_2():
                 "alert": 0,
                 "rssi": -50
             }
-            res = stress_client.publish("tuonghuy_drone/payload/sensors", json.dumps(payload))
+            res = stress_client.publish("iot102_drone/payload/sensors", json.dumps(payload))
             if res.rc == mqtt.MQTT_ERR_SUCCESS:
                 success_count += 1
         

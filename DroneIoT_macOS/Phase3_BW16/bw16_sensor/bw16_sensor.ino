@@ -21,8 +21,8 @@
 const char* ssid        = SECRET_SSID;       // Tên WiFi (đọc từ secrets.h)
 const char* password    = SECRET_PASS;      // Mật khẩu WiFi (đọc từ secrets.h)
 const char* mqtt_server = "broker.hivemq.com"; // Đổi topic thành duy nhất để không bị trùng lặp trên mạng Public
-const char* topic_sensors = "tuonghuy_drone/payload/sensors";
-const char* topic_payload = "tuonghuy_drone/control/payload";
+const char* topic_sensors = "iot102_drone/payload/sensors";
+const char* topic_payload = "iot102_drone/control/payload";
 const int   mqtt_port   = 1883;
 
 // ── Pin definitions ───────────────────────────────────────
@@ -224,7 +224,7 @@ void connectMQTT() {
     while (!client.connected() && retry < MQTT_MAX_RETRIES) {
         Serial.print("[MQTT] Dang ket noi broker...");
 
-        String clientId = "TuongHuy_BW16_" + String(random(0xffff), HEX);
+        String clientId = "DroneIoT_BW16_" + String(random(0xffff), HEX);
         if (client.connect(clientId.c_str())) {
             Serial.println(" OK!");
             client.subscribe(topic_payload);

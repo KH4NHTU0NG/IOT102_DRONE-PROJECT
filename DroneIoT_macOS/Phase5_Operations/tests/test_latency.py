@@ -13,7 +13,7 @@ INFLUX_BUCKET = "drone_data"
 
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
-MQTT_TOPIC = "tuonghuy_drone/payload/sensors"
+MQTT_TOPIC = "iot102_drone/payload/sensors"
 
 executor = None
 influx_client = None
