@@ -170,32 +170,17 @@ pkill -f fusion.py
 cd Phase1_Docker && docker compose down
 ```
 
----
+## Các Kịch Bản Ứng Dụng
 
-## Changelog
+Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 2 kịch bản hoạt động:
 
-### v3.1 — 24/06/2026 (UI Redesign + Script Fix)
+1. **Bay thật (Real Flight):**
+   Gắn mạch Ameba BW16 cùng các cụm cảm biến và Servo trực tiếp lên thân Drone thực tế. BW16 đóng vai trò làm *Payload Board*, thu thập thông tin môi trường và nhận lệnh thả hàng. Dữ liệu kết nối về trạm mặt đất (Gateway) qua WiFi/4G bằng MQTT, còn Drone nhận lệnh điều khiển bay MAVLink thực tế qua Telemetry Radio.
 
-**Web Dashboard**
-- 🎨 Thiết kế lại giao diện: Engineering UI thuần túy, không có dấu hiệu AI vibe design
-- Font: Inter (UI) + JetBrains Mono (data/log)
-- Bảng màu neutral: `#f0f2f5` nền, white card, `#d9dde4` border
-- Layout 2 cột (Telemetry | Flight+Payload) + hàng dưới (Servo + MQTT config)
-- Button system: primary/danger/success/warning/secondary/ghost
-
-**Scripts**
-- 🐛 **FIX S-01**: Thêm guard kiểm tra thư mục vào `start_all.sh` — in hướng dẫn rõ ràng nếu chạy sai vị trí
-- 🐛 **FIX S-02**: Tương tự cho `stop_all.sh`
-- 📝 Thêm comment đầu file hướng dẫn cách chạy đúng
-
-**README**
-- 📝 Bổ sung warning "phải chạy từ DroneIoT_macOS/" ở mọi section có lệnh script
-- 📝 Thêm lệnh `cd` đầy đủ đường dẫn vào tất cả code block
+2. **Bay ảo (SITL Simulation):**
+   Chạy ArduPilot SITL trên máy tính để mô phỏng drone (tạo ra toạ độ, độ cao ảo). Mạch BW16 vẫn được cấp nguồn thực tế và đo cảm biến thực tế, nhưng được dùng để kiểm thử phần mềm trên máy tính (Gateway + Web Dashboard). Cách này giúp phát triển code cực kỳ an toàn mà không sợ hỏng hóc thiết bị.
 
 ---
-
-
-
 ## Xử Lý Sự Cố
 
 | Triệu chứng | Nguyên nhân | Giải pháp |
