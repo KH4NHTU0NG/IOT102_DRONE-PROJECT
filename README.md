@@ -191,51 +191,7 @@ cd Phase1_Docker && docker compose down
 
 ---
 
-### v3.0 — 24/06/2026 (Full Audit & Optimization)
 
-**Firmware (bw16_sensor.ino)**
-- 🐛 **FIX F-01**: `is_alert` → biến toàn cục `env_alert` — OLED nay hiển thị đúng cảnh báo khí gas
-- ⚡ **OPT F-05**: Thay String `+=` JSON bằng `snprintf()` — giảm heap fragmentation trên MCU
-- ⚡ **OPT F-06**: `callback()` dùng `String::reserve()` — loại bỏ O(n²) memory allocation
-- 🐛 **FIX F-02**: Sửa debug messages sai số chân (PA14/PA15)
-- 🐛 **FIX F-03**: `updateOLED()` dùng `mq_raw_val` cached — CO2 hiển thị khớp MQTT
-- 🐛 **FIX F-04**: Clamp góc Servo `constrain(angle, 0, 180)` — tránh hỏng motor
-- 🧹 **OPT F-07**: Extract magic numbers thành hằng số có tên (`WIFI_MAX_RETRIES`, `OLED_I2C_ADDR`, v.v.)
-
-**Gateway (fusion.py)**
-- 🔴 **FIX G-01**: Tách TAKEOFF/LAND/RTL thành daemon threads — `master_lock` không còn bị giữ ~2.5s, `mavlink_loop` không bị starve
-- 🔴 **FIX G-02+G-03**: Thêm `finally` block clean-up MQTT (`loop_stop + disconnect`) và MAVLink (`master.close()`)
-- 🧹 **FIX G-04**: Xóa dead code `sensor_received` Event
-- 🧹 **FIX G-05**: Xóa redundant `command_long_send` cho LAND/RTL
-- 🐛 **FIX G-06**: Validate altitude `max(1.0, min(alt, 100.0))`
-- 🐛 **FIX G-07**: Token placeholder check bổ sung `"YOUR_INFLUXDB_TOKEN_HERE"`
-
-**Web Dashboard (index.html)**
-- 🔴 **FIX W-01**: Sửa CDN filename `pj-paho-mqtt.min.js` → `paho-mqtt.min.js`
-- 🔒 **FIX W-02**: Thay `innerHTML` bằng `textContent` — vá lỗ hổng XSS
-- ⚡ **FIX W-03**: Auto-reconnect với exponential backoff (1s → 2s → 4s → ... → 30s)
-- 🛡️ **FIX W-04**: Confirm dialog cho lệnh nguy hiểm (ARM/TAKEOFF/LAND/RTL)
-- ⚡ **FIX W-05**: Disable tất cả control buttons khi MQTT disconnected
-- ⚡ **OPT W-06**: Cache DOM references — tránh `getElementById()` lặp trong hot path
-- ⚡ **OPT W-07**: `addLog()` chỉ split khi cần — O(1) thay vì O(n) mỗi lần log
-
-**Infrastructure**
-- 🔧 **I-01**: Đồng bộ MQTT topics → `iot102_drone/*`
-- 🐛 **I-02**: Thêm timeout 15s cho InfluxDB khởi động
-- 🔧 **I-03**: Pin Docker versions: `mosquitto:2.0`, `grafana:10.4.0`
-- 🐛 **I-04**: Fix float comparison `==` → `abs() < 1.0` trong test_latency.py
-- 🔧 **I-05**: `docker-compose` v1 → `docker compose` v2 trong tất cả shell scripts
-
-### v2.6 — 23/06/2026
-- Fix OLED Double Wire.begin hang (Incorrect pin: 26)
-- Fix BW16 auto-reconnect WiFi
-
-### v2.5 — 22/06/2026
-- Tích hợp SITL ArduPilot với MAVLink TCP
-- Thread-safe `master_lock` cho MAVLink operations
-- Fusion gateway auto-drain MAVLink socket buffer
-
----
 
 ## Xử Lý Sự Cố
 
@@ -253,8 +209,8 @@ cd Phase1_Docker && docker compose down
 
 ## Cấu Trúc Thư Mục
 
-```
-DroneIoT_macOS/
+```text
+IOT102_DRONE-PROJECT/
 ├── Phase1_Docker/
 │   ├── docker-compose.yml      # Mosquitto 2.0, InfluxDB 2.0, Grafana 10.4
 │   ├── mosquitto/mosquitto.conf
@@ -264,22 +220,17 @@ DroneIoT_macOS/
 │   └── run_sitl.sh
 ├── Phase3_BW16/
 │   └── bw16_sensor/
-│       ├── bw16_sensor.ino     # Firmware v3.0
+│       ├── bw16_sensor.ino     # Firmware v3.3
 │       └── secrets.h           # ← KHÔNG commit file này
 ├── Phase4_Fusion/
-│   ├── fusion.py               # Gateway v3.0
+│   ├── fusion.py               # Gateway v3.3
 │   ├── requirements.txt
 │   └── setup_venv.sh
 └── Phase5_Operations/
     ├── start_all.sh
     ├── stop_all.sh
-    ├── web_control/
-    │   └── index.html          # Dashboard v3.0
-    └── tests/
-        ├── test_web_control.py
-        ├── test_latency.py
-        ├── test_continuity.py
-        └── test_fault_tolerance.py
+    └── web_control/
+        └── index.html          # Dashboard v3.3
 ```
 
 ---
