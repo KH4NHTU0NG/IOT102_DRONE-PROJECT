@@ -152,30 +152,13 @@ Mở file `Phase5_Operations/web_control/index.html` bằng Chrome/Firefox (Ctrl
 - Auto-reconnect MQTT khi mất kết nối (exponential backoff, tối đa 30s)
 - Disable tất cả nút khi chưa kết nối (tránh lệnh nhầm)
 
----
 
-## Kiểm Thử Tự Động
-
-```bash
-cd IOT102_DRONE-PROJECT
-
-# Test 1: Round-trip MQTT commands
-./Phase4_Fusion/drone_env/bin/python3 Phase5_Operations/tests/test_web_control.py
-
-# Test 2: Fault tolerance (stress 500 msgs, reconnect)
-./Phase4_Fusion/drone_env/bin/python3 Phase5_Operations/tests/test_fault_tolerance.py
-
-# Test 3: Continuity (đo khoảng trống dữ liệu InfluxDB)
-./Phase4_Fusion/drone_env/bin/python3 Phase5_Operations/tests/test_continuity.py
-```
-
----
 
 ## Dừng Hệ Thống
 
 ```bash
-# Từ trong DroneIoT_macOS/
-cd <đường dẫn đến DroneIoT_macOS>
+# Từ thư mục gốc IOT102_DRONE-PROJECT/
+cd <đường dẫn đến IOT102_DRONE-PROJECT>
 bash Phase5_Operations/stop_all.sh
 
 # Hoặc thủ công
