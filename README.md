@@ -225,5 +225,5 @@ IOT102_DRONE-PROJECT/
 
 ---
 
-> **Tác giả:** IOT102 Drone Project — Team  
+> **Tác giả:** IOT102 Drone Project — by KH4NHTU0NG
 > **Môi trường:** macOS Apple Silicon + ArduPilot SITL + HiveMQ Public Broker
