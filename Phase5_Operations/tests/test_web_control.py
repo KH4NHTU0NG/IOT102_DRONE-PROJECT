@@ -109,7 +109,7 @@ def print_test_3_manual():
     print("=" * 60)
     print("  1. Khởi động hệ thống (Docker + SITL + fusion.py)")
     print("  2. Mở trình duyệt web Chrome hoặc Firefox.")
-    print("  3. Nhấn phím tắt Cmd+O (macOS) hoặc Ctrl+O (Windows).")
+    print("  3. Nhấn phím tắt Cmd+O (macOS).")
     print("  4. Chọn đường dẫn file 'index.html' tại:")
     print("     Phase5_Operations/web_control/index.html")
     print("  5. Quan sát Badge Status ở góc trên: Phải hiển thị 'Connected' màu xanh lá.")

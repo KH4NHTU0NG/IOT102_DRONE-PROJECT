@@ -59,7 +59,7 @@ Board BW16 có **2 nút nhỏ**:
    ```
 2. **Tools → Board → Boards Manager** → tìm `AmebaD` → Install
 3. **Tools → Board** → chọn `AmebaD(RTL8720DN)` → chọn `BW16`
-4. **Tools → Port** → chọn `/dev/cu.usbserial-xxxx` (macOS) hoặc `COM3` (Windows)
+4. **Tools → Port** → chọn `/dev/cu.usbserial-xxxx` (macOS)
 
 ---
 
@@ -71,13 +71,7 @@ ipconfig getifaddr en0   # WiFi thường
 ipconfig getifaddr en1   # Nếu dùng adapter khác
 ```
 
-**Windows:**
-```cmd
-ipconfig
-# Tìm dòng "IPv4 Address" của card "Wi-Fi" hoặc "Wireless LAN adapter"
-```
 
----
 
 ## Lỗi upload thường gặp
 
@@ -86,7 +80,7 @@ ipconfig
 | `error: Enter Uart Download Mode` | Nhấn nút không đúng lúc | Làm lại BURN+RESET trong 5s đếm ngược |
 | `Cannot access /dev/cu.usbserial-xxxx` | Board không phản hồi | Kiểm tra cáp data, thử lại Upload Mode |
 | Port không hiện trong danh sách | Thiếu driver CH340 | **macOS**: Cài tại wch-ic.com → CH341SER_MAC |
-| Port không hiện (Windows) | Thiếu driver | **Windows**: Cài CH340 driver từ wch-ic.com |
+
 | `[not connected]` ở status bar | Cáp chỉ sạc | Đổi sang cáp **data** (có dây D+/D-) |
 
 ### Kiểm tra port (macOS):
@@ -95,8 +89,4 @@ ls /dev/cu.*
 # Phải thấy: /dev/cu.usbserial-xxxx sau khi cắm board
 ```
 
-### Kiểm tra port (Windows):
-```
-Device Manager → Ports (COM & LPT)
-# Phải thấy: USB-SERIAL CH340 (COMx)
-```
+
