@@ -57,6 +57,18 @@ graph TD
 
 ---
 
+## Các Kịch Bản Ứng Dụng
+
+Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 2 kịch bản hoạt động:
+
+1. **Bay thật (Real Flight):**
+   Gắn mạch Ameba BW16 cùng các cụm cảm biến và Servo trực tiếp lên thân Drone thực tế. BW16 đóng vai trò làm *Payload Board*, thu thập thông tin môi trường và nhận lệnh thả hàng. Dữ liệu kết nối về trạm mặt đất (Gateway) qua WiFi/4G bằng MQTT, còn Drone nhận lệnh điều khiển bay MAVLink thực tế qua Telemetry Radio.
+
+2. **Bay ảo (SITL Simulation):**
+   Chạy ArduPilot SITL trên máy tính để mô phỏng drone (tạo ra toạ độ, độ cao ảo). Mạch BW16 vẫn được cấp nguồn thực tế và đo cảm biến thực tế, nhưng được dùng để kiểm thử phần mềm trên máy tính (Gateway + Web Dashboard). Cách này giúp phát triển code cực kỳ an toàn mà không sợ hỏng hóc thiết bị.
+
+---
+
 ## Cài Đặt Lần Đầu
 
 ### Yêu cầu
@@ -116,20 +128,20 @@ bash setup_venv.sh
 
 ## Khởi Động Hàng Ngày
 
-> ⚠️ **Quan trọng:** Tất cả lệnh bên dưới phải chạy từ thư mục `DroneIoT_macOS/`.
+> ⚠️ **Quan trọng:** Tất cả lệnh bên dưới phải chạy từ thư mục `IOT102_DRONE-PROJECT/`.
 
 ```bash
 # Vào đúng thư mục gốc trước
-cd <đường dẫn đến DroneIoT_macOS>
+cd <đường dẫn đến IOT102_DRONE-PROJECT>
 
 # Một lệnh khởi động toàn bộ hệ thống
 bash Phase5_Operations/start_all.sh
 ```
 
-Hoặc thủ công từng bước (cũng chạy từ `DroneIoT_macOS/`):
+Hoặc thủ công từng bước (cũng chạy từ `IOT102_DRONE-PROJECT/`):
 
 ```bash
-cd <đường dẫn đến DroneIoT_macOS>
+cd <đường dẫn đến IOT102_DRONE-PROJECT>
 
 # 1. Docker
 cd Phase1_Docker && docker compose up -d && cd ..
@@ -170,22 +182,12 @@ pkill -f fusion.py
 cd Phase1_Docker && docker compose down
 ```
 
-## Các Kịch Bản Ứng Dụng
 
-Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 2 kịch bản hoạt động:
-
-1. **Bay thật (Real Flight):**
-   Gắn mạch Ameba BW16 cùng các cụm cảm biến và Servo trực tiếp lên thân Drone thực tế. BW16 đóng vai trò làm *Payload Board*, thu thập thông tin môi trường và nhận lệnh thả hàng. Dữ liệu kết nối về trạm mặt đất (Gateway) qua WiFi/4G bằng MQTT, còn Drone nhận lệnh điều khiển bay MAVLink thực tế qua Telemetry Radio.
-
-2. **Bay ảo (SITL Simulation):**
-   Chạy ArduPilot SITL trên máy tính để mô phỏng drone (tạo ra toạ độ, độ cao ảo). Mạch BW16 vẫn được cấp nguồn thực tế và đo cảm biến thực tế, nhưng được dùng để kiểm thử phần mềm trên máy tính (Gateway + Web Dashboard). Cách này giúp phát triển code cực kỳ an toàn mà không sợ hỏng hóc thiết bị.
-
----
 ## Xử Lý Sự Cố
 
 | Triệu chứng | Nguyên nhân | Giải pháp |
 |:------------|:------------|:----------|
-| `No such file or directory` khi chạy script | Đang ở sai thư mục | `cd DroneIoT_macOS` trước, rồi `bash Phase5_Operations/start_all.sh` |
+| `No such file or directory` khi chạy script | Đang ở sai thư mục | `cd IOT102_DRONE-PROJECT` trước, rồi `bash Phase5_Operations/start_all.sh` |
 | Serial Monitor in `Error amb_ard_pin_check_fun` | `Wire.begin()` bị gọi 2 lần | Đã sửa trong v2.6 |
 | OLED không hiển thị cảnh báo gas | `is_alert` scoping sai | Đã sửa trong v3.0 |
 | Web không kết nối được MQTT | CDN Paho sai filename | Đã sửa trong v3.0 |
