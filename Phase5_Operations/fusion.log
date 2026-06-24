@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/trankhanhtuong/Desktop/IOT102_DRONE-PROJECT/DroneIoT_macOS/Phase4_Fusion/fusion.py", line 12, in <module>
+    import paho.mqtt.client as mqtt
+ModuleNotFoundError: No module named 'paho'

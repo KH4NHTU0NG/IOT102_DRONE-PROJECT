@@ -1,35 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-drone_env/
-ENV/
-env/
-
-# Sensitive data
-.influx_token
-secrets.h
-
-# Logs
-*.log
-fusion.log
-fusion.pid
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# ArduPilot SITL / MAVLink logs & temp files
-*.tlog
-*.tlog.raw
-eeprom.bin
-mav.parm
-terrain/
-
+Phase2_SITL/logs/
+*.BIN
+LASTLOG.TXT
