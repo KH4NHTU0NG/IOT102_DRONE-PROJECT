@@ -1,4 +1,4 @@
-# Drone IoT — Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
+# Drone IoT — Mạch ứng dụng Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
 
 > **Phiên bản v3.3** — Simplify + Remove SRF05 | 24/06/2026
 
