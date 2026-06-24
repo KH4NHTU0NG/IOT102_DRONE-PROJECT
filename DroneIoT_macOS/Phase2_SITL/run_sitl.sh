@@ -26,19 +26,9 @@ echo "✅ Tìm thấy SITL: $SITL_BIN"
 
 # ── Kiểm tra port 5760 không bị chiếm ────────────────────
 if lsof -ti :5760 &>/dev/null; then
-    echo ""
-    echo "⚠️  Port 5760 đang bị chiếm bởi:"
-    lsof -i :5760 | head -5
-    echo ""
-    read -r -p "Muốn kill process đó không? [y/N]: " ans
-    if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
-        lsof -ti :5760 | xargs kill -9 2>/dev/null || true
-        sleep 1
-        echo "✅ Đã giải phóng port 5760."
-    else
-        echo "❌ Port 5760 vẫn bị chiếm. Dừng lại."
-        exit 1
-    fi
+    echo "⚠️  Port 5760 đang bị chiếm. Giải phóng..."
+    lsof -ti :5760 | xargs kill -9 2>/dev/null || true
+    sleep 1
 fi
 
 # ── Kiểm tra port 14550 không bị chiếm ───────────────────

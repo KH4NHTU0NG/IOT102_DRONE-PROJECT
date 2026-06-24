@@ -55,27 +55,25 @@ echo ""
 echo "━━━ [2/4] Kiểm tra BW16 Board ━━━"
 echo "  → Cắm nguồn board BW16 (cáp USB hoặc nguồn ngoài)"
 echo "  → Quan sát LED: nháy đều = WiFi OK"
-echo ""
-read -r -p "  BW16 đã kết nối WiFi chưa? [y/N]: " bw16_ready
-if [[ "$bw16_ready" != "y" && "$bw16_ready" != "Y" ]]; then
-    echo "  ⚠️  Tiếp tục — fusion.py sẽ chờ data từ BW16."
-fi
+echo "  → Hệ thống sẽ tự động bắt dữ liệu khi BW16 kết nối xong."
 
-# ── Bước 3: SITL (mở Terminal mới) ────────────────────────
+# ── Bước 3: SITL (chạy nền) ───────────────────────────────
 echo ""
-echo "━━━ [3/4] Khởi động SITL ━━━"
-echo "  → Mở Terminal MỚI và chạy:"
-echo "     cd ../Phase2_SITL && bash run_sitl.sh"
-echo ""
-read -r -p "  Chờ SITL hiện 'MAV>' rồi nhấn Enter để tiếp tục..."
+echo "━━━ [3/4] Khởi động SITL (Chạy nền) ━━━"
+nohup bash "$ROOT_DIR/Phase2_SITL/run_sitl.sh" > "$ROOT_DIR/Phase5_Operations/sitl.log" 2>&1 &
+echo "  → Đang chờ SITL khởi động (khoảng 10-30s)..."
 
 # Verify port 5763
+for i in {1..30}; do
+    if lsof -i :5763 &>/dev/null; then
+        echo "✅ Port 5763 đang mở. SITL đã sẵn sàng."
+        break
+    fi
+    sleep 1
+done
 if ! lsof -i :5763 &>/dev/null; then
-    echo "⚠️  Port 5763 chưa mở — SITL có thể chưa sẵn sàng."
-    echo "   Đợi thêm 30 giây cho SITL build xong."
-    sleep 30
+    echo "⚠️  Port 5763 chưa mở sau 30s — SITL có thể bị lỗi, kiểm tra Phase5_Operations/sitl.log."
 fi
-echo "✅ Port 5763 đang mở."
 
 # ── Bước 4: Fusion gateway ────────────────────────────────
 echo ""
@@ -107,5 +105,6 @@ echo "║                                                  ║"
 echo "║  BƯỚC TIẾP THEO:                                ║"
 echo "║  1. Mở QGroundControl → tự kết nối UDP 14550    ║"
 echo "║  2. Mở http://localhost:3000 → Grafana           ║"
-echo "║  3. Xem log: tail -f Phase5_Operations/fusion.log║"
+echo "║  3. Xem log fusion: tail -f Phase5_Operations/fusion.log ║"
+echo "║  4. Xem log SITL:   tail -f Phase5_Operations/sitl.log   ║"
 echo "╚══════════════════════════════════════════════════╝"
