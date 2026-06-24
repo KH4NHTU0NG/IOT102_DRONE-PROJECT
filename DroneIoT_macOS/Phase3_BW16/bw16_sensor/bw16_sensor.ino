@@ -67,7 +67,7 @@ const int   WIFI_MAX_RETRIES   = 30;     // Số lần thử kết nối WiFi
 const int   MQTT_MAX_RETRIES   = 5;      // Số lần thử kết nối MQTT
 const int   MQTT_RETRY_DELAY   = 3000;   // Thời gian chờ giữa các lần thử MQTT (ms)
 const int   MQTT_KEEPALIVE     = 60;     // Thời gian keepalive MQTT (s)
-const unsigned long PULSE_TIMEOUT_US = 20000; // Timeout đọc siêu âm (µs)
+const unsigned long PULSE_TIMEOUT_US = 12000; // Giảm từ 20000 xuống 12000us (~2m, đủ cho drone) — giải phóng CPU sớm hơn
 const unsigned long MQ135_WARMUP_MS  = 30000; // Thời gian khởi động MQ-135 (ms)
 const unsigned long BLINK_INTERVAL   = 200;   // Nhịp chớp đèn va chạm (ms)
 const uint8_t OLED_I2C_ADDR    = 0x3C;   // Địa chỉ I2C màn hình OLED
@@ -174,6 +174,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
         digitalWrite(LED_PIN, LED_OFF);
         digitalWrite(LED_GREEN_PIN, LED_ON);
         Serial.println("[CONTROL] MQTT override: BAT LED XANH");
+    } else if (command == "DISARM") {
+        // Tắt động cơ: chỉ an toàn khi drone đang nhàn (nếu cần)
+        // Không có hành động ở firmware BW16 — lệnh DISARM đi qua MQTT tới gateway
+        Serial.println("[CONTROL] DISARM command received at BW16 (no local action)");
     } else if (command == "RESET") {
         mqtt_buzzer_override = false;
         mqtt_led_override    = false;
@@ -330,6 +334,7 @@ void loop() {
         connectMQTT();
     }
 
+    // Gọi client.loop() đầu tiên — đảm bảo MQTT keepalive và nhận lệnh nhanh nhất
     client.loop();
 
     unsigned long now = millis();
@@ -342,13 +347,16 @@ void loop() {
     delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
     
-    // 2. Đọc thời gian vọng (timeout 20000us tương đương ~3.4m)
+    // 2. Đọc thời gian vọng (timeout giảm xuống 12000us tương đương ~2m)
     long duration = pulseIn(ECHO_PIN, HIGH, PULSE_TIMEOUT_US);
     if (duration == 0) {
-        distance_cm = -1; // Không có vật cản gần
+        distance_cm = -1; // Không có vật cản gần (ngoài tầm)
     } else {
         distance_cm = duration * 0.034 / 2;
     }
+
+    // Gọi loop() lần 2 sau pulseIn (đảm bảo xử lý MQTT trong khi được khóa 12ms)
+    client.loop();
 
     bool collision_alert = (distance_cm > 0 && distance_cm < COLLISION_DIST_CM);
 

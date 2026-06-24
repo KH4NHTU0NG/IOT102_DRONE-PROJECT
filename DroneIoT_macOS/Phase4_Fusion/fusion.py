@@ -30,8 +30,10 @@ INFLUX_BUCKET = "drone_data"
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT   = 1883
 
-TOPIC_SENSORS = "tuonghuy_drone/payload/sensors"
-TOPIC_FLIGHT_CMD = "tuonghuy_drone/control/flight"
+TOPIC_SENSORS     = "tuonghuy_drone/payload/sensors"
+TOPIC_FLIGHT_CMD  = "tuonghuy_drone/control/flight"
+TOPIC_PAYLOAD_CMD = "tuonghuy_drone/control/payload"  # Thêm: lắng nghe để log/forward
+TOPIC_STATUS      = "tuonghuy_drone/status/gateway"   # Thêm: gửi ACK về web
 
 SITL_HOST     = "127.0.0.1"
 SITL_PORT     = 5763  # Cổng MAVProxy chuyển tiếp ra TCP
@@ -68,16 +70,60 @@ def load_token() -> str:
 # ══════════════════════════════════════════════════════════
 # MQTT Callbacks & Thread
 # ══════════════════════════════════════════════════════════
+# Subscribe callback
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         print(f"[MQTT] ✅ Kết nối thành công broker {MQTT_BROKER}:{MQTT_PORT}")
         client.subscribe(TOPIC_SENSORS)
         client.subscribe(TOPIC_FLIGHT_CMD)
-        print(f"[MQTT] Đã subscribe: {TOPIC_SENSORS} & {TOPIC_FLIGHT_CMD}")
+        client.subscribe(TOPIC_PAYLOAD_CMD)  # F-FIX: Lắng nghe payload để log
+        print(f"[MQTT] Đã subscribe: {TOPIC_SENSORS}, {TOPIC_FLIGHT_CMD}, {TOPIC_PAYLOAD_CMD}")
     else:
         print(f"[MQTT] ❌ Kết nối thất bại, code={reason_code}")
 
 # ── G-01: Các handler chạy trên thread riêng để tránh giữ master_lock quá lâu ──
+
+def _handle_arm():
+    """F-05 FIX: ARM cần set GUIDED mode trước, rồi mới ARM."""
+    try:
+        print("[MAVLINK] ARM: Requesting GUIDED mode first...")
+        with master_lock:
+            if master is None:
+                print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua ARM.")
+                return
+            master.set_mode('GUIDED')
+        time.sleep(0.5)  # Chờ mode change
+
+        # Force ARM (param2=21196) trong SITL
+        with master_lock:
+            if master is None:
+                return
+            master.mav.command_long_send(
+                master.target_system, master.target_component,
+                mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
+                1, 21196, 0, 0, 0, 0, 0
+            )
+        print("[MAVLINK] ✅ Sent ARM command (GUIDED + force)")
+    except Exception as e:
+        print(f"[MAVLINK] Lỗi xử lý ARM: {e}")
+
+
+def _handle_disarm():
+    """DISARM drone."""
+    try:
+        with master_lock:
+            if master is None:
+                print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua DISARM.")
+                return
+            master.mav.command_long_send(
+                master.target_system, master.target_component,
+                mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
+                0, 0, 0, 0, 0, 0, 0  # param1=0 = DISARM
+            )
+        print("[MAVLINK] ✅ Sent DISARM command")
+    except Exception as e:
+        print(f"[MAVLINK] Lỗi xử lý DISARM: {e}")
+
 
 def _handle_takeoff(alt):
     """G-01: Tách TAKEOFF ra thread riêng để không chặn mavlink_loop (~2.5s)."""
@@ -166,10 +212,14 @@ def on_message(client, userdata, msg):
     topic = msg.topic
     try:
         payload_str = msg.payload.decode("utf-8")
+
+        # ── Xử lý dữ liệu cảm biến từ BW16 ──
         if topic == TOPIC_SENSORS:
             data = json.loads(payload_str)
             with state_lock:
                 sensor_data = data
+
+        # ── Xử lý lệnh điều khiển bay → MAVLink ──
         elif topic == TOPIC_FLIGHT_CMD:
             data = json.loads(payload_str)
             command = data.get("command")
@@ -177,17 +227,11 @@ def on_message(client, userdata, msg):
             print(f"[CMD] Nhận lệnh bay: {command} (alt={alt}m)")
 
             if command == "ARM":
-                with master_lock:
-                    if master is None:
-                        print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua lệnh.")
-                        return
-                    # Fix P-002: ARM cần dùng force arm (param2=21196) trong SITL
-                    master.mav.command_long_send(
-                        master.target_system, master.target_component,
-                        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0,
-                        1, 21196, 0, 0, 0, 0, 0
-                    )
-                print("[MAVLINK] Sent ARM command (force)")
+                # F-05 FIX: Tách ARM ra thread để set GUIDED trước
+                threading.Thread(target=_handle_arm, daemon=True).start()
+
+            elif command == "DISARM":
+                threading.Thread(target=_handle_disarm, daemon=True).start()
 
             elif command == "TAKEOFF":
                 threading.Thread(target=_handle_takeoff, args=(alt,), daemon=True).start()
@@ -199,7 +243,6 @@ def on_message(client, userdata, msg):
                 threading.Thread(target=_handle_rtl, daemon=True).start()
 
             elif command == "RESET_FLIGHT":
-                # Fix W-003: Handler cho nút Reset Flight trên web
                 with master_lock:
                     if master is None:
                         print("[MAVLINK] ⚠️  Chưa kết nối SITL. Bỏ qua lệnh.")
@@ -208,8 +251,16 @@ def on_message(client, userdata, msg):
                     master.set_mode('GUIDED')
                 print("[MAVLINK] Mode reset sang GUIDED thành công")
 
+        # ── Log lệnh payload (LED/Buzzer/Servo) — forward tới BW16 qua broker ──
+        elif topic == TOPIC_PAYLOAD_CMD:
+            data = json.loads(payload_str)
+            command = data.get("command", "?")
+            print(f"[CMD] Payload command received: {command} (relay to BW16 via broker)")
+            # Không cần forward — BW16 đã subscribe trực tiếp topic này
+            # Gateway chỉ log để debug
+
     except Exception as e:
-        print(f"[MQTT] Lỗi xử lý tin nhắn: {e}")
+        print(f"[MQTT] Lỗi xử lý tin nhắn topic={topic}: {e}")
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
     if reason_code != 0:
