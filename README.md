@@ -147,7 +147,7 @@ python3 fusion.py
 Mở file `Phase5_Operations/web_control/index.html` bằng Chrome/Firefox (Ctrl+O / Cmd+O).
 
 **Tính năng:**
-- Hiển thị telemetry thời gian thực: Nhiệt độ, Độ ẩm, CO2, RSSI, Khoảng cách va chạm
+- Hiển thị telemetry thời gian thực: Nhiệt độ, Độ ẩm, CO2, RSSI
 - Điều khiển Drone: ARM / TAKEOFF 10m / LAND / RTL (có confirm dialog)
 - Điều khiển Payload: Bật/tắt Còi, Đèn LED, Servo thả hàng
 - Auto-reconnect MQTT khi mất kết nối (exponential backoff, tối đa 30s)
