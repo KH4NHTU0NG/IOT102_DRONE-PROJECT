@@ -9,7 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        /* ── Reset & Base ────────────────────────────────── */
+        /* Reset & Base */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
@@ -42,14 +42,14 @@
             min-height: 100vh;
         }
 
-        /* ── Layout ──────────────────────────────────────── */
+        /* Layout */
         .page {
             max-width: 1100px;
             margin: 0 auto;
             padding: 24px 20px 40px;
         }
 
-        /* ── Header ──────────────────────────────────────── */
+        /* Header */
         .topbar {
             display: flex;
             align-items: center;
@@ -80,7 +80,7 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
-        /* ── Status Badge ────────────────────────────────── */
+        /* Status Badge */
         .status {
             display: inline-flex;
             align-items: center;
@@ -115,7 +115,7 @@
             50% { opacity: 0.4; }
         }
 
-        /* ── Card ────────────────────────────────────────── */
+        /* Card */
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -150,7 +150,7 @@
             padding: 16px;
         }
 
-        /* ── Main Grid ───────────────────────────────────── */
+        /* Main Grid */
         .grid-main {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -166,7 +166,7 @@
             margin-bottom: 16px;
         }
 
-        /* ── Telemetry Table ─────────────────────────────── */
+        /* Telemetry Table */
         .telem-table {
             width: 100%;
             border-collapse: collapse;
@@ -209,7 +209,7 @@
             color: var(--red);
         }
 
-        /* ── Alert Banner ────────────────────────────────── */
+        /* Alert Banner */
         .alert-banner {
             display: none;
             margin-top: 12px;
@@ -223,7 +223,7 @@
         }
         .alert-banner.show { display: flex; gap: 6px; align-items: center; }
 
-        /* ── Buttons ─────────────────────────────────────── */
+        /* Buttons */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -307,7 +307,7 @@
 
         .btn-full { width: 100%; }
 
-        /* ── Button Group (flight control) ───────────────── */
+        /* Button Group (flight control) */
         .btn-group {
             display: flex;
             flex-direction: column;
@@ -319,7 +319,7 @@
             gap: 8px;
         }
 
-        /* ── Servo ───────────────────────────────────────── */
+        /* Servo */
         .servo-display {
             text-align: center;
             margin-bottom: 12px;
@@ -360,7 +360,7 @@
         }
         input[type="range"]:disabled { opacity: 0.4; }
 
-        /* ── MQTT Config ─────────────────────────────────── */
+        /* MQTT Config */
         .config-row {
             display: grid;
             grid-template-columns: 1fr 120px auto;
@@ -396,7 +396,7 @@
             background: #fff;
         }
 
-        /* ── Log ─────────────────────────────────────────── */
+        /* Log */
         .log-header {
             display: flex;
             align-items: center;
@@ -420,7 +420,7 @@
             outline: none;
         }
 
-        /* ── Footer ──────────────────────────────────────── */
+        /* Footer */
         .footer {
             padding-top: 20px;
             border-top: 1px solid var(--border);
@@ -432,7 +432,7 @@
             align-items: center;
         }
 
-        /* ── Section separator ───────────────────────────── */
+        /* Section separator */
         .section-label {
             font-size: 11px;
             font-weight: 500;
@@ -442,7 +442,7 @@
             margin-bottom: 8px;
         }
 
-        /* ── Tag / badge ─────────────────────────────────── */
+        /* Tag / badge */
         .tag {
             display: inline-block;
             font-size: 10px;
@@ -458,7 +458,7 @@
         .tag-amber  { background: var(--amber-soft);  color: var(--amber); }
         .tag-gray   { background: var(--gray-soft);   color: var(--gray); }
 
-        /* ── Charts ──────────────────────────────────────────── */
+        /* Charts */
         .charts-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -519,7 +519,7 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
-        /* ── Responsive ──────────────────────────────────────── */
+        /* Responsive */
         @media (max-width: 768px) {
             .grid-main  { grid-template-columns: 1fr; }
             .grid-bottom { grid-template-columns: 1fr; }
@@ -533,7 +533,7 @@
 <body>
 <div class="page">
 
-    <!-- ── Topbar ─────────────────────────────────────────── -->
+    <!-- Topbar -->
     <div class="topbar">
         <div class="topbar-left">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -553,7 +553,7 @@
         </div>
     </div>
 
-    <!-- ── Main Grid: Telemetry + Flight ──────────────────── -->
+    <!-- Main Grid: Telemetry + Flight -->
     <div class="grid-main">
 
         <!-- Telemetry -->
@@ -646,7 +646,7 @@
         </div>
     </div>
 
-    <!-- ── Bottom Grid: Servo + MQTT Config ───────────────── -->
+    <!-- Bottom Grid: Servo + MQTT Config -->
     <div class="grid-bottom">
 
         <!-- Servo -->
@@ -703,7 +703,7 @@
 
     </div>
 
-    <!-- ── Charts ────────────────────────────────────────── -->
+    <!-- Charts -->
     <div class="charts-grid">
 
         <!-- Nhiệt độ -->
@@ -783,7 +783,7 @@
 
     </div>
 
-    <!-- ── Log ────────────────────────────────────────────── -->
+    <!-- Log -->
     <div class="card">
         <div class="card-body">
             <div class="log-header">
@@ -794,7 +794,7 @@
         </div>
     </div>
 
-    <!-- ── Footer ────────────────────────────────────────── -->
+    <!-- Footer -->
     <div class="footer">
         <span>Drone IoT — BW16 RTL8720DN + ArduPilot SITL + InfluxDB</span>
         <span>MQTT WebSocket :8000</span>
@@ -803,13 +803,13 @@
 </div>
 
 <script type="text/javascript">
-    /* ── Constants ─────────────────────────────────────── */
+    /* Constants */
     const TOPIC_SENSORS = "iot102_drone/payload/sensors";
     const TOPIC_FLIGHT  = "iot102_drone/control/flight";
     const TOPIC_PAYLOAD = "iot102_drone/control/payload";
-    const CHART_MAX_PTS = 60; // Số điểm tối đa hiển thị trên mỗi chart
+    const CHART_MAX_PTS = 60;
 
-    /* ── Cached DOM refs ───────────────────────────────── */
+    /* Cached DOM refs */
     const logConsole  = document.getElementById('log_console');
     const hostInput   = document.getElementById('mqtt_host');
     const portInput   = document.getElementById('mqtt_port');
@@ -825,7 +825,7 @@
     const distEl      = document.getElementById('distance_value');
     const radarWarnEl = document.getElementById('radar_warning');
 
-    /* ── State ─────────────────────────────────────────── */
+    /* State */
     let client           = null;
     let isConnected      = false;
     let userDisconnected = false;
@@ -833,7 +833,7 @@
     let reconnectTimer   = null;
     let logLineCount     = 0;
 
-    /* ── Chart Setup ───────────────────────────────────── */
+    /* Chart Setup */
     function makeChart(canvasId, color, yLabel, unit, suggestedMin, suggestedMax) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         return new Chart(ctx, {
@@ -894,7 +894,6 @@
         });
     }
 
-    // Khởi tạo 5 chart
     const charts = {
         temp: makeChart('chart_temp', '#2563eb', 'Nhiệt độ', '°C',  0,  50),
         hum:  makeChart('chart_hum',  '#0891b2', 'Độ ẩm',    '%',   0, 100),
@@ -903,7 +902,6 @@
         rssi: makeChart('chart_rssi', '#7c3aed', 'RSSI',    'dBm', -90, -20)
     };
 
-    // Cập nhật 1 chart với giá trị mới
     function pushChart(chartKey, value, latestId, noDataId, unit) {
         if (value === null || value === undefined || isNaN(+value)) return;
         const chart = charts[chartKey];
@@ -915,13 +913,13 @@
             chart.data.labels.shift();
             chart.data.datasets[0].data.shift();
         }
-        chart.update('none'); // 'none' = skip animation for performance
+        chart.update('none');
         document.getElementById(latestId).textContent = (+value).toFixed(1) + ' ' + unit;
         const noData = document.getElementById(noDataId);
         if (noData) noData.style.display = 'none';
     }
 
-    /* ── Connection ────────────────────────────────────── */
+    /* Connection */
     function startConnection() {
         const host = hostInput.value.trim() || 'broker.hivemq.com';
         const isHttps = window.location.protocol === 'https:';
@@ -988,7 +986,7 @@
         if (slider) slider.disabled = !connected;
     }
 
-    /* ── MQTT Callbacks ────────────────────────────────── */
+    /* MQTT Callbacks */
     function onConnect() {
         updateUIConnected(true);
         reconnectAttempts = 0;
@@ -1020,7 +1018,7 @@
         }
     }
 
-    /* ── Message Handler ───────────────────────────────── */
+    /* Message Handler */
     function onMessageArrived(message) {
         const topic   = message.destinationName;
         const payload = message.payloadString;
@@ -1068,7 +1066,7 @@
                 }
             }
 
-            /* ── Cập nhật Charts ────────────────────────── */
+            // Charts
             pushChart('temp', d.temp,     'chart_temp_latest', 'no_data_temp', '°C');
             pushChart('hum',  humVal,     'chart_hum_latest',  'no_data_hum',  '%');
             pushChart('co2',  d.co2,      'chart_co2_latest',  'no_data_co2',  'ADC');
@@ -1076,7 +1074,6 @@
             if (d.distance !== undefined && d.distance !== -1) {
                 pushChart('dist', d.distance, 'chart_dist_latest', 'no_data_dist', 'cm');
             } else if (d.distance === -1) {
-                // >3m = 300cm placeholder cho chart
                 pushChart('dist', 300, 'chart_dist_latest', 'no_data_dist', 'cm');
                 document.getElementById('chart_dist_latest').textContent = '> 3m';
             }
@@ -1086,7 +1083,7 @@
         }
     }
 
-    /* ── Commands ──────────────────────────────────────── */
+    /* Commands */
     function sendFlightCommand(cmdName) {
         if (!client || !isConnected) { addLog("[ERR] Chưa kết nối MQTT"); return; }
         const dangerous = ['ARM', 'DISARM', 'TAKEOFF', 'LAND', 'RTL'];
@@ -1100,15 +1097,6 @@
         if (!client || !isConnected) { addLog("[ERR] Chưa kết nối MQTT"); return; }
         client.send(buildMsg({ command: cmdName }, TOPIC_PAYLOAD));
         addLog(`[PUB] ${cmdName} → ${TOPIC_PAYLOAD}`);
-        // Feedback ngay vào log — dữ liệu thực tế BW16 phản hồi qua sensors topic
-        const feedbackMap = {
-            'LED_ON':     '[LED] ⇒ Bật LED — chờ BW16 xứ lý...',
-            'LED_OFF':    '[LED] ⇒ Tắt LED — chờ BW16 xử lý...',
-            'BUZZER_ON':  '[BUZZER] ⇒ Bật còi — chờ BW16 xử lý...',
-            'BUZZER_OFF': '[BUZZER] ⇒ Tắt còi — chờ BW16 xử lý...',
-            'RESET':      '[PAYLOAD] ⇒ Reset tự động gửi OK'
-        };
-        if (feedbackMap[cmdName]) addLog(feedbackMap[cmdName]);
     }
 
     function updateServoDisplay(val) {
@@ -1130,7 +1118,7 @@
         return m;
     }
 
-    /* ── Log ───────────────────────────────────────────── */
+    /* Log */
     function addLog(msg) {
         const d = new Date();
         const ts = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -1146,7 +1134,7 @@
     function clearLogs() { logConsole.value = ""; logLineCount = 0; }
     function pad(n) { return String(n).padStart(2, '0'); }
 
-    /* ── Init ──────────────────────────────────────────── */
+    /* Init */
     updateUIConnected(false);
     startConnection();
 </script>
