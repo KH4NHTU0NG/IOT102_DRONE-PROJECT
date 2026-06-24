@@ -205,9 +205,7 @@
         .telem-value.ok {
             color: var(--green);
         }
-        .telem-value.radar-alert {
-            color: var(--red);
-        }
+
 
         /* Alert Banner */
         .alert-banner {
@@ -471,7 +469,7 @@
             border-radius: var(--radius);
             box-shadow: var(--shadow);
         }
-        .chart-card.span-2 { grid-column: span 2; }
+
         .chart-header {
             display: flex;
             align-items: center;
@@ -526,7 +524,6 @@
             .config-row { grid-template-columns: 1fr; }
             .btn-row    { grid-template-columns: 1fr; }
             .charts-grid { grid-template-columns: 1fr; }
-            .chart-card.span-2 { grid-column: span 1; }
         }
     </style>
 </head>
@@ -581,10 +578,7 @@
                         <td class="telem-label">CO2 (ADC thô)</td>
                         <td class="telem-value"><span id="co2_value">--</span><span class="telem-unit">ADC</span></td>
                     </tr>
-                    <tr>
-                        <td class="telem-label">Khoảng cách</td>
-                        <td class="telem-value"><span id="distance_value">--</span><span class="telem-unit">cm</span></td>
-                    </tr>
+
                     <tr>
                         <td class="telem-label">RSSI BW16</td>
                         <td class="telem-value"><span id="rssi_value">--</span><span class="telem-unit">dBm</span></td>
@@ -594,10 +588,7 @@
                         <td class="telem-value"><span id="alert_value" class="ok">AN TOÀN</span></td>
                     </tr>
                 </table>
-                <div id="radar_warning" class="alert-banner">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                    PHÁT HIỆN VẬT CẢN — Khoảng cách &lt; 30cm
-                </div>
+
             </div>
         </div>
 
@@ -751,20 +742,7 @@
             </div>
         </div>
 
-        <!-- Khoảng cách (span 2) -->
-        <div class="chart-card span-2">
-            <div class="chart-header">
-                <span class="chart-title">
-                    <span class="chart-dot" style="background:#dc2626"></span>
-                    Khoảng cách (SRF05)
-                </span>
-                <span class="chart-latest" id="chart_dist_latest">--</span>
-            </div>
-            <div class="chart-body">
-                <canvas id="chart_dist"></canvas>
-                <div class="chart-no-data" id="no_data_dist">Chờ dữ liệu...</div>
-            </div>
-        </div>
+
 
         <!-- RSSI -->
         <div class="chart-card">
@@ -822,8 +800,6 @@
     const co2El       = document.getElementById('co2_value');
     const alertEl     = document.getElementById('alert_value');
     const rssiEl      = document.getElementById('rssi_value');
-    const distEl      = document.getElementById('distance_value');
-    const radarWarnEl = document.getElementById('radar_warning');
 
     /* State */
     let client           = null;
@@ -898,7 +874,6 @@
         temp: makeChart('chart_temp', '#2563eb', 'Nhiệt độ', '°C',  0,  50),
         hum:  makeChart('chart_hum',  '#0891b2', 'Độ ẩm',    '%',   0, 100),
         co2:  makeChart('chart_co2',  '#d97706', 'CO2',      'ADC', 0, 4095),
-        dist: makeChart('chart_dist', '#dc2626', 'Khoảng cách', 'cm', 0, 400),
         rssi: makeChart('chart_rssi', '#7c3aed', 'RSSI',    'dBm', -90, -20)
     };
 
@@ -1049,34 +1024,11 @@
 
             if (d.rssi != null) rssiEl.textContent = d.rssi;
 
-            if (d.distance !== undefined) {
-                if (d.distance === -1) {
-                    distEl.textContent = "> 3m";
-                    distEl.className   = "";
-                    radarWarnEl.classList.remove("show");
-                } else {
-                    distEl.textContent = d.distance;
-                    if (d.distance > 0 && d.distance < 30) {
-                        distEl.className = "radar-alert";
-                        radarWarnEl.classList.add("show");
-                    } else {
-                        distEl.className = "";
-                        radarWarnEl.classList.remove("show");
-                    }
-                }
-            }
-
             // Charts
             pushChart('temp', d.temp,     'chart_temp_latest', 'no_data_temp', '°C');
             pushChart('hum',  humVal,     'chart_hum_latest',  'no_data_hum',  '%');
             pushChart('co2',  d.co2,      'chart_co2_latest',  'no_data_co2',  'ADC');
             pushChart('rssi', d.rssi,     'chart_rssi_latest', 'no_data_rssi', 'dBm');
-            if (d.distance !== undefined && d.distance !== -1) {
-                pushChart('dist', d.distance, 'chart_dist_latest', 'no_data_dist', 'cm');
-            } else if (d.distance === -1) {
-                pushChart('dist', 300, 'chart_dist_latest', 'no_data_dist', 'cm');
-                document.getElementById('chart_dist_latest').textContent = '> 3m';
-            }
 
         } catch (e) {
             addLog(`[ERR] Parse JSON thất bại: ${payload}`);

@@ -338,7 +338,6 @@ def main():
                 hum  = max(0.0, float(sensor.get("humidity", 0.0)))
                 co2  = max(0, int(sensor.get("co2", 0)))
                 alert = sensor.get("alert", 0)
-                distance = float(sensor.get("distance", -1.0))
                 rssi  = sensor.get("rssi", 0)
 
                 point = (
@@ -350,7 +349,6 @@ def main():
                     .field("humidity",    float(hum))
                     .field("co2",         float(co2))
                     .field("alert",       float(alert))
-                    .field("distance",    float(distance))
                     .field("wifi_rssi",   float(rssi))
                 )
 
