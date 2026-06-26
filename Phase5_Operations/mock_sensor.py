@@ -24,15 +24,15 @@ current_temp = 25.0
 current_hum = 60.0
 current_co2 = 400
 
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code == 0:
         print(f"✅ [MOCK SENSOR] Đã kết nối tới MQTT Broker: {MQTT_BROKER}")
         client.subscribe(TOPIC_PAYLOAD)
         print(f"🎧 [MOCK SENSOR] Đang lắng nghe lệnh điều khiển tại: {TOPIC_PAYLOAD}")
     else:
-        print(f"❌ [MOCK SENSOR] Kết nối thất bại, mã lỗi: {rc}")
+        print(f"❌ [MOCK SENSOR] Kết nối thất bại, mã lỗi: {reason_code}")
 
-def on_message(client, userdata, msg):
+def on_message(client, userdata, msg, properties=None):
     try:
         command = json.loads(msg.payload.decode('utf-8'))
         print(f"\n⚡ [MOCK SENSOR - NHẬN LỆNH TỪ WEB]: {command}")
@@ -77,7 +77,7 @@ def generate_telemetry():
 def main():
     print("🚀 Khởi động MOCK SENSOR (Virtual Hardware)...")
     
-    client = mqtt.Client(client_id=f"DroneIoT_Mock_{random.randint(1000, 9999)}")
+    client = mqtt.Client(client_id=f"DroneIoT_Mock_{random.randint(1000, 9999)}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
     client.on_message = on_message
     
