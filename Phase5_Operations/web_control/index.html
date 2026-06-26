@@ -337,6 +337,62 @@
             display: block;
         }
 
+        /* [NEW] Motor Dynamics */
+        .motor-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            align-items: end;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        .motor-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            height: 100%;
+            justify-content: flex-end;
+        }
+        .motor-bar-wrap {
+            width: 100%;
+            background: var(--border);
+            border-radius: 4px;
+            height: 80px;
+            display: flex;
+            align-items: flex-end;
+            overflow: hidden;
+        }
+        .motor-bar {
+            width: 100%;
+            background: linear-gradient(to top, #3b82f6, #60a5fa);
+            border-radius: 4px 4px 0 0;
+            transition: height 0.15s ease;
+            height: 0%;
+        }
+        .motor-bar.high { background: linear-gradient(to top, #f59e0b, #fbbf24); }
+        .motor-label { font-size: 10px; color: var(--text-3); font-weight: 600; }
+        .motor-pwm   { font-size: 10px; color: var(--text-2); font-family: 'JetBrains Mono', monospace; }
+
+        /* [NEW] Weather Control */
+        .wind-display {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .wind-val {
+            font-size: 28px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: #60a5fa;
+        }
+        .wind-scale {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-3);
+            margin-top: 2px;
+        }
+
         input[type="range"] {
             -webkit-appearance: none;
             width: 100%;
@@ -666,6 +722,76 @@
             </div>
         </div>
 
+        <!-- [NEW] Motor Dynamics -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <circle cx="10" cy="10" r="3"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.22 3.22l2.12 2.12M14.66 14.66l2.12 2.12M3.22 16.78l2.12-2.12M14.66 5.34l2.12-2.12"/>
+                    </svg>
+                    Động lực học cánh quạt
+                </span>
+                <span class="tag tag-blue">PWM LIVE</span>
+            </div>
+            <div class="card-body">
+                <div class="motor-grid">
+                    <div class="motor-col">
+                        <div class="motor-bar-wrap"><div id="bar_m1" class="motor-bar"></div></div>
+                        <span class="motor-label">M1</span>
+                        <span class="motor-pwm" id="lbl_m1">1000</span>
+                    </div>
+                    <div class="motor-col">
+                        <div class="motor-bar-wrap"><div id="bar_m2" class="motor-bar"></div></div>
+                        <span class="motor-label">M2</span>
+                        <span class="motor-pwm" id="lbl_m2">1000</span>
+                    </div>
+                    <div class="motor-col">
+                        <div class="motor-bar-wrap"><div id="bar_m3" class="motor-bar"></div></div>
+                        <span class="motor-label">M3</span>
+                        <span class="motor-pwm" id="lbl_m3">1000</span>
+                    </div>
+                    <div class="motor-col">
+                        <div class="motor-bar-wrap"><div id="bar_m4" class="motor-bar"></div></div>
+                        <span class="motor-label">M4</span>
+                        <span class="motor-pwm" id="lbl_m4">1000</span>
+                    </div>
+                </div>
+                <p style="font-size:11px;color:var(--text-3);text-align:center;margin:0;">
+                    1000 = Dừng &nbsp;|&nbsp; 2000 = Full throttle
+                </p>
+            </div>
+        </div>
+
+        <!-- [NEW] Weather Control -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+                    </svg>
+                    Môi trường SITL
+                </span>
+                <span class="tag tag-gray">SIM_WIND_SPD</span>
+            </div>
+            <div class="card-body">
+                <div class="wind-display">
+                    <span class="wind-val" id="wind_val_display">0 m/s</span>
+                    <span class="servo-label">Tốc độ gió mô phỏng</span>
+                </div>
+                <input type="range" id="wind_slider" min="0" max="25" step="1" value="0"
+                       oninput="sendWindSpeed(this.value)">
+                <div class="wind-scale">
+                    <span>0 m/s (Lặng)</span>
+                    <span>13 (Cấp 6)</span>
+                    <span>25 (Bão)</span>
+                </div>
+                <div class="btn-row" style="margin-top:10px;">
+                    <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">🌤 Lặng gió</button>
+                    <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">🌪 Bão cấp 7</button>
+                </div>
+            </div>
+        </div>
+
         <!-- MQTT Config -->
         <div class="card" style="grid-column: span 2;">
             <div class="card-header">
@@ -785,6 +911,8 @@
     const TOPIC_SENSORS = "iot102_drone/payload/sensors";
     const TOPIC_FLIGHT  = "iot102_drone/control/flight";
     const TOPIC_PAYLOAD = "iot102_drone/control/payload";
+    const TOPIC_MOTORS  = "iot102_drone/telemetry/motors";   // [NEW]
+    const TOPIC_WEATHER = "iot102_drone/control/weather";    // [NEW]
     const CHART_MAX_PTS = 60;
 
     /* Cached DOM refs */
@@ -970,7 +1098,8 @@
         client.subscribe(TOPIC_SENSORS);
         client.subscribe(TOPIC_FLIGHT);
         client.subscribe(TOPIC_PAYLOAD);
-        addLog("[MQTT] Subscribe: " + TOPIC_SENSORS);
+        client.subscribe(TOPIC_MOTORS);  // [NEW]
+        addLog("[MQTT] Subscribe: sensors, flight, payload, motors");
     }
 
     function onFailure(message) {
@@ -999,7 +1128,15 @@
         const payload = message.payloadString;
 
         if (topic !== TOPIC_SENSORS) {
-            addLog(`[SUB] [${topic}] ${payload}`);
+            // [NEW] Xử lý dữ liệu động cơ
+            if (topic === TOPIC_MOTORS) {
+                try {
+                    const m = JSON.parse(payload);
+                    updateMotorBars(m);
+                } catch(e) {}
+            } else {
+                addLog(`[SUB] [${topic}] ${payload}`);
+            }
             return;
         }
 
@@ -1068,6 +1205,26 @@
         const m = new MQTTMsg(JSON.stringify({ ...obj, timestamp: Date.now() }));
         m.destinationName = topic;
         return m;
+    }
+
+    /* [NEW] Motor PWM Bar Update */
+    function updateMotorBars(m) {
+        ['m1','m2','m3','m4'].forEach(id => {
+            const val = m[id] || 1000;
+            const pct = Math.min(100, Math.max(0, ((val - 1000) / 1000) * 100));
+            const bar = document.getElementById('bar_' + id);
+            const lbl = document.getElementById('lbl_' + id);
+            if (bar) bar.style.height = pct + '%';
+            if (lbl) lbl.textContent = val;
+        });
+    }
+
+    /* [NEW] Send Wind Speed to fusion.py */
+    function sendWindSpeed(val) {
+        document.getElementById('wind_val_display').textContent = val + ' m/s';
+        if (!client || !client.isConnected()) return;
+        client.send(buildMsg({ wind_speed: parseFloat(val) }, TOPIC_WEATHER));
+        addLog(`[PUB] Wind Speed ${val} m/s → ${TOPIC_WEATHER}`);
     }
 
     /* Log */

@@ -25,6 +25,8 @@ MQTT_PORT   = 1883
 TOPIC_SENSORS     = "iot102_drone/payload/sensors"
 TOPIC_FLIGHT_CMD  = "iot102_drone/control/flight"
 TOPIC_PAYLOAD_CMD = "iot102_drone/control/payload"
+TOPIC_MOTOR_DATA  = "iot102_drone/telemetry/motors"   # [NEW] PWM 4 động cơ
+TOPIC_WEATHER_CMD = "iot102_drone/control/weather"    # [NEW] Điều khiển gió SITL
 
 SITL_HOST = "127.0.0.1"
 SITL_PORT = 5763
@@ -32,10 +34,12 @@ SITL_PORT = 5763
 # --- Shared State ---
 gps_data = {}
 sensor_data = {}
+motor_data = {"m1": 1000, "m2": 1000, "m3": 1000, "m4": 1000}  # [NEW] PWM motors
 state_lock = threading.Lock()
 master_lock = threading.Lock()
 
-master = None  # Global MAVLink connection
+master = None         # Global MAVLink connection
+mqtt_pub = None       # [NEW] Global MQTT client ref for publishing from mavlink_loop
 
 
 def load_token() -> str:
@@ -151,15 +155,39 @@ def _handle_takeoff(alt):
         print(f"[MAVLINK] Lỗi TAKEOFF: {e}")
 
 
+# --- [NEW] Wind Speed Handler ---
+
+def _handle_wind_speed(speed: float):
+    """[NEW] Đặt tốc độ gió mô phỏng SITL qua MAVLink parameter."""
+    with master_lock:
+        if master is None:
+            print("[WEATHER] ⚠️  SITL chưa kết nối.")
+            return
+        try:
+            master.mav.param_set_send(
+                master.target_system,
+                master.target_component,
+                b'SIM_WIND_SPD',
+                speed,
+                mavutil.mavlink.MAV_PARAM_TYPE_REAL32
+            )
+            print(f"[WEATHER] 🌪️  Đặt SIM_WIND_SPD = {speed} m/s")
+        except Exception as e:
+            print(f"[WEATHER] ❌ Lỗi: {e}")
+
+
 # --- MQTT Callbacks ---
 
 def on_connect(client, userdata, flags, reason_code, properties):
+    global mqtt_pub
     if reason_code == 0:
+        mqtt_pub = client  # [NEW] Lưu ref để dùng trong mavlink_loop
         print(f"[MQTT] ✅ Connected to {MQTT_BROKER}:{MQTT_PORT}")
         client.subscribe(TOPIC_SENSORS)
         client.subscribe(TOPIC_FLIGHT_CMD)
         client.subscribe(TOPIC_PAYLOAD_CMD)
-        print(f"[MQTT] Subscribed: {TOPIC_SENSORS}, {TOPIC_FLIGHT_CMD}, {TOPIC_PAYLOAD_CMD}")
+        client.subscribe(TOPIC_WEATHER_CMD)  # [NEW]
+        print(f"[MQTT] Subscribed: sensors, flight, payload, weather")
     else:
         print(f"[MQTT] ❌ Connection failed, code={reason_code}")
 
@@ -199,6 +227,11 @@ def on_message(client, userdata, msg):
             data = json.loads(payload_str)
             command = data.get("command", "?")
             print(f"[CMD] Payload: {command} (BW16 subscribes directly)")
+
+        elif topic == TOPIC_WEATHER_CMD:  # [NEW] Điều khiển gió SITL
+            data = json.loads(payload_str)
+            wind_speed = float(data.get("wind_speed", 0.0))
+            threading.Thread(target=_handle_wind_speed, args=(wind_speed,), daemon=True).start()
 
     except Exception as e:
         print(f"[MQTT] Lỗi xử lý topic={topic}: {e}")
@@ -279,6 +312,25 @@ def mavlink_loop():
                         "lon": latest_msg.lon / 1e7,
                         "alt": latest_msg.relative_alt / 1000.0
                     }
+
+            # [NEW] Đọc SERVO_OUTPUT_RAW → publish motor PWM lên MQTT
+            servo_msg = None
+            with master_lock:
+                if master is not None:
+                    servo_msg = master.recv_match(type='SERVO_OUTPUT_RAW', blocking=False)
+
+            if servo_msg is not None and mqtt_pub is not None:
+                motor_payload = json.dumps({
+                    "m1": servo_msg.servo1_raw,
+                    "m2": servo_msg.servo2_raw,
+                    "m3": servo_msg.servo3_raw,
+                    "m4": servo_msg.servo4_raw,
+                })
+                try:
+                    mqtt_pub.publish(TOPIC_MOTOR_DATA, motor_payload)
+                except Exception:
+                    pass
+
             time.sleep(0.1)
         except Exception as e:
             print(f"[MAVLINK] Lỗi đọc GPS: {e}. Reconnecting...")
