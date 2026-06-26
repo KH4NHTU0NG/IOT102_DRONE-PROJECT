@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         /* Reset & Base */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -473,6 +474,23 @@
             resize: vertical;
             outline: none;
         }
+        /* [NEW] 3D Attitude Container */
+        #drone3d_container {
+            width: 100%;
+            height: 250px;
+            background: #0b0c10;
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .att-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .att-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; display: block; }
+        .att-lab { font-size: 10px; color: var(--text-3); text-transform: uppercase; }
 
         /* Footer */
         .footer {
@@ -852,6 +870,27 @@
             </div>
         </div>
 
+        <!-- [NEW] 3D Telemetry View -->
+        <div class="card" style="grid-column: span 2;">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2l8 4-8 4-8-4 8-4z"/><path d="M2 12l8 4 8-4M2 18l8 4 8-4"/>
+                    </svg>
+                    Góc nghiêng 3D
+                </span>
+                <span class="tag tag-gray" id="eng_st">STANDBY</span>
+            </div>
+            <div class="card-body">
+                <div id="drone3d_container"></div>
+                <div class="att-grid">
+                    <div><span class="att-lab">Roll</span><span class="att-val" id="att_r">0.0</span></div>
+                    <div><span class="att-lab">Pitch</span><span class="att-val" id="att_p">0.0</span></div>
+                    <div><span class="att-lab">Yaw</span><span class="att-val" id="att_y">0.0</span></div>
+                </div>
+            </div>
+        </div>
+
         <!-- MQTT Config -->
         <div class="card" style="grid-column: span 2;">
             <div class="card-header">
@@ -976,6 +1015,7 @@
     const TOPIC_HEARTBEAT = "iot102_drone/control/heartbeat"; // [NEW] Watchdog Ping
     const TOPIC_MISSION   = "iot102_drone/control/mission";   // [NEW] Waypoint Mission
     const TOPIC_SIM       = "iot102_drone/control/sim_param"; // [NEW] SITL Params
+    const TOPIC_ATTITUDE  = "iot102_drone/telemetry/attitude";// [NEW] 3D Attitude
     const CHART_MAX_PTS = 60;
 
     /* Cached DOM refs */
@@ -1162,7 +1202,8 @@
         client.subscribe(TOPIC_FLIGHT);
         client.subscribe(TOPIC_PAYLOAD);
         client.subscribe(TOPIC_MOTORS);  // [NEW]
-        addLog("[MQTT] Subscribe: sensors, flight, payload, motors");
+        client.subscribe(TOPIC_ATTITUDE);// [NEW]
+        addLog("[MQTT] Subscribe: sensors, flight, payload, motors, attitude");
 
         // [NEW] Khởi động Failsafe Heartbeat (mỗi 3 giây)
         if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -1196,11 +1237,17 @@
         const payload = message.payloadString;
 
         if (topic !== TOPIC_SENSORS) {
-            // [NEW] Xử lý dữ liệu động cơ
+            // [NEW] Xử lý dữ liệu động cơ và 3D Attitude
             if (topic === TOPIC_MOTORS) {
                 try {
                     const m = JSON.parse(payload);
                     updateMotorBars(m);
+                    if (typeof updatePropellerSpeeds === 'function') updatePropellerSpeeds(m);
+                } catch(e) {}
+            } else if (topic === TOPIC_ATTITUDE) {
+                try {
+                    const a = JSON.parse(payload);
+                    if (typeof updateDrone3D === 'function') updateDrone3D(a);
                 } catch(e) {}
             } else {
                 addLog(`[SUB] [${topic}] ${payload}`);
@@ -1336,6 +1383,107 @@
     /* Init */
     updateUIConnected(false);
     startConnection();
+
+    /* ==============================================================
+       [NEW] THREE.JS 3D DRONE MODEL IMPLEMENTATION
+       ============================================================== */
+    let scene, camera, renderer, droneGroup;
+    let propMeshes = [];
+    let propSpeeds = [0, 0, 0, 0];
+
+    function init3D() {
+        const container = document.getElementById('drone3d_container');
+        if (!container) return;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b0c10);
+        camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(3, 2, 4);
+        camera.lookAt(0, 0, 0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        container.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const pointLight = new THREE.PointLight(0x00ffcc, 1, 10);
+        pointLight.position.set(2, 5, 2);
+        scene.add(pointLight);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(10, 20, 0x00ffcc, 0x1f2833);
+        gridHelper.position.y = -0.5;
+        scene.add(gridHelper);
+
+        droneGroup = new THREE.Group();
+        
+        // Body
+        droneGroup.add(new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, 1), new THREE.MeshPhongMaterial({ color: 0x1f2833 })));
+        
+        // Front Indicator
+        const frontMark = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        frontMark.position.set(0, 0.15, -0.5);
+        droneGroup.add(frontMark);
+        
+        // Arms and Propellers
+        const armLength = 1.2;
+        const positions = [
+            { x: armLength, z: -armLength },
+            { x: -armLength, z: armLength },
+            { x: armLength, z: armLength },
+            { x: -armLength, z: -armLength }
+        ];
+
+        positions.forEach((pos) => {
+            const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.02, 16), new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 }));
+            prop.position.set(pos.x, 0.2, pos.z);
+            droneGroup.add(prop);
+            propMeshes.push(prop);
+
+            const armGeo = new THREE.CylinderGeometry(0.05, 0.05, Math.sqrt(pos.x*pos.x + pos.z*pos.z));
+            const arm = new THREE.Mesh(armGeo, new THREE.MeshPhongMaterial({ color: 0x888888 }));
+            arm.rotation.x = Math.PI / 2;
+            arm.rotation.z = Math.atan2(pos.x, pos.z);
+            arm.position.set(pos.x/2, 0, pos.z/2);
+            droneGroup.add(arm);
+        });
+
+        scene.add(droneGroup);
+        animate3D();
+    }
+
+    function animate3D() {
+        requestAnimationFrame(animate3D);
+        for (let i = 0; i < 4; i++) {
+            if (propSpeeds[i] > 0) propMeshes[i].rotation.y += propSpeeds[i] * 0.5;
+        }
+        renderer.render(scene, camera);
+    }
+
+    function updateDrone3D(data) {
+        if (!droneGroup) return;
+        droneGroup.rotation.x = -(data.pitch || 0);
+        droneGroup.rotation.z = -(data.roll || 0);
+        droneGroup.rotation.y = -(data.yaw || 0);
+        document.getElementById('att_r').innerText = ((data.roll || 0) * 180/Math.PI).toFixed(1);
+        document.getElementById('att_p').innerText = ((data.pitch || 0) * 180/Math.PI).toFixed(1);
+        document.getElementById('att_y').innerText = ((data.yaw || 0) * 180/Math.PI).toFixed(1);
+    }
+
+    function updatePropellerSpeeds(data) {
+        const pwm = [data.m1, data.m2, data.m3, data.m4];
+        propSpeeds = pwm.map(v => (v > 1050 ? (v - 1000) / 1000.0 : 0));
+        const spinning = propSpeeds.some(v => v > 0);
+        const el = document.getElementById('eng_st');
+        if (el) {
+            el.innerText = spinning ? 'SPINNING' : 'STANDBY';
+            el.style.color = spinning ? '#00ffcc' : '#9ca3af';
+        }
+    }
+
+    window.addEventListener('load', init3D);
 </script>
 </body>
 </html>

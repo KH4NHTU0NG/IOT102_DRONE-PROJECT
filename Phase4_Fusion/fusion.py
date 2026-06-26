@@ -30,6 +30,7 @@ TOPIC_WEATHER_CMD = "iot102_drone/control/weather"
 TOPIC_HEARTBEAT   = "iot102_drone/control/heartbeat"
 TOPIC_MISSION_CMD = "iot102_drone/control/mission"
 TOPIC_SIM_CMD     = "iot102_drone/control/sim_param"  # [NEW] Điều khiển tham số SITL
+TOPIC_ATTITUDE    = "iot102_drone/telemetry/attitude" # [NEW] Dữ liệu góc nghiêng (3D)
 
 SITL_HOST = "127.0.0.1"
 SITL_PORT = 5763
@@ -382,6 +383,23 @@ def mavlink_loop():
                 })
                 try:
                     mqtt_pub.publish(TOPIC_MOTOR_DATA, motor_payload)
+                except Exception:
+                    pass
+
+            # [NEW] Đọc ATTITUDE → publish góc nghiêng lên MQTT cho 3D Model
+            attitude_msg = None
+            with master_lock:
+                if master is not None:
+                    attitude_msg = master.recv_match(type='ATTITUDE', blocking=False)
+
+            if attitude_msg is not None and mqtt_pub is not None:
+                attitude_payload = json.dumps({
+                    "roll": attitude_msg.roll,
+                    "pitch": attitude_msg.pitch,
+                    "yaw": attitude_msg.yaw
+                })
+                try:
+                    mqtt_pub.publish(TOPIC_ATTITUDE, attitude_payload)
                 except Exception:
                     pass
 
