@@ -59,13 +59,16 @@ graph TD
 
 ## Các Kịch Bản Ứng Dụng
 
-Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 2 kịch bản hoạt động:
+Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 3 kịch bản hoạt động:
 
 1. **Bay thật (Real Flight):**
    Gắn mạch Ameba BW16 cùng các cụm cảm biến và Servo trực tiếp lên thân Drone thực tế. BW16 đóng vai trò làm *Payload Board*, thu thập thông tin môi trường và nhận lệnh thả hàng. Dữ liệu kết nối về trạm mặt đất (Gateway) qua WiFi/4G bằng MQTT, còn Drone nhận lệnh điều khiển bay MAVLink thực tế qua Telemetry Radio.
 
 2. **Bay ảo (SITL Simulation):**
    Chạy ArduPilot SITL trên máy tính để mô phỏng drone (tạo ra toạ độ, độ cao ảo). Mạch BW16 vẫn được cấp nguồn thực tế và đo cảm biến thực tế, nhưng được dùng để kiểm thử phần mềm trên máy tính (Gateway + Web Dashboard). Cách này giúp phát triển code cực kỳ an toàn mà không sợ hỏng hóc thiết bị.
+
+3. **Demo & Phát triển (Không cần mạch thật):**
+   Nếu bạn chưa mua linh kiện hoặc không mang mạch theo, bạn hoàn toàn có thể chạy file `Phase5_Operations/mock_sensor.py`. Kịch bản này sẽ sinh ra dữ liệu nhiệt độ, khí gas giả lập và gửi lên MQTT giống hệt như một board BW16 thật. Dùng để test Web Dashboard và Grafana ngay trên máy tính cục bộ. Mở Terminal mới và gõ: `python3 Phase5_Operations/mock_sensor.py` (có thể cần chạy trong môi trường ảo `drone_env`).
 
 ---
 
