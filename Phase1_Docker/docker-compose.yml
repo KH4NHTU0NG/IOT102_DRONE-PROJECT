@@ -1,7 +1,6 @@
 # ============================================================
 # docker-compose.yml — macOS Apple Silicon (ARM64)
-# Bug fix #4: thêm restart: unless-stopped cho mọi service
-# Bug fix #5: thêm named volumes để persist data
+# Grafana Provisioning: dashboard tự động load từ file JSON
 # ============================================================
 services:
   mosquitto:
@@ -27,7 +26,7 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=drone_org
       - DOCKER_INFLUXDB_INIT_BUCKET=drone_data
     volumes:
-      - influxdb_data:/var/lib/influxdb2   # Bug fix #5: persist DB
+      - influxdb_data:/var/lib/influxdb2
 
   grafana:
     image: grafana/grafana:10.4.0
@@ -37,10 +36,18 @@ services:
       - "3000:3000"
     depends_on:
       - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
-      - grafana_data:/var/lib/grafana       # Bug fix #5: persist dashboards
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning          # Auto-load datasource
+      - ./grafana/dashboards:/var/lib/grafana/dashboards          # Auto-load dashboard JSON
 
 # Named volumes — data sống sót qua docker-compose restart
 volumes:
   influxdb_data:
   grafana_data:
+
