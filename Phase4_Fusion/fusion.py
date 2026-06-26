@@ -27,8 +27,9 @@ TOPIC_FLIGHT_CMD  = "iot102_drone/control/flight"
 TOPIC_PAYLOAD_CMD = "iot102_drone/control/payload"
 TOPIC_MOTOR_DATA  = "iot102_drone/telemetry/motors"
 TOPIC_WEATHER_CMD = "iot102_drone/control/weather"
-TOPIC_HEARTBEAT   = "iot102_drone/control/heartbeat"  # [NEW] Ping từ Web
-TOPIC_MISSION_CMD = "iot102_drone/control/mission"    # [NEW] Waypoint Mission
+TOPIC_HEARTBEAT   = "iot102_drone/control/heartbeat"
+TOPIC_MISSION_CMD = "iot102_drone/control/mission"
+TOPIC_SIM_CMD     = "iot102_drone/control/sim_param"  # [NEW] Điều khiển tham số SITL
 
 SITL_HOST = "127.0.0.1"
 SITL_PORT = 5763
@@ -181,6 +182,25 @@ def _handle_wind_speed(speed: float):
         except Exception as e:
             print(f"[WEATHER] ❌ Lỗi: {e}")
 
+def _handle_sim_param(param_id: str, value: float):
+    """[NEW] Gửi thông số giả lập (Turbulence, Engine Fail, GPS Glitch, v.v.) vào SITL."""
+    with master_lock:
+        if master is None:
+            print(f"[SIM_CMD] ⚠️  SITL chưa kết nối. Bỏ qua {param_id}={value}")
+            return
+        try:
+            param_bytes = param_id.encode('utf-8')
+            master.mav.param_set_send(
+                master.target_system,
+                master.target_component,
+                param_bytes,
+                value,
+                mavutil.mavlink.MAV_PARAM_TYPE_REAL32
+            )
+            print(f"[SIM_CMD] 🔧 Đã set {param_id} = {value}")
+        except Exception as e:
+            print(f"[SIM_CMD] ❌ Lỗi khi set {param_id}: {e}")
+
 
 # --- MQTT Callbacks ---
 
@@ -193,9 +213,10 @@ def on_connect(client, userdata, flags, reason_code, properties):
         client.subscribe(TOPIC_FLIGHT_CMD)
         client.subscribe(TOPIC_PAYLOAD_CMD)
         client.subscribe(TOPIC_WEATHER_CMD)
-        client.subscribe(TOPIC_HEARTBEAT)   # [NEW]
-        client.subscribe(TOPIC_MISSION_CMD) # [NEW]
-        print(f"[MQTT] Subscribed: sensors, flight, payload, weather, heartbeat, mission")
+        client.subscribe(TOPIC_HEARTBEAT)
+        client.subscribe(TOPIC_MISSION_CMD)
+        client.subscribe(TOPIC_SIM_CMD)  # [NEW]
+        print(f"[MQTT] Subscribed: sensors, flight, payload, weather, heartbeat, mission, sim_param")
     else:
         print(f"[MQTT] ❌ Connection failed, code={reason_code}")
 
@@ -256,7 +277,15 @@ def on_message(client, userdata, msg):
         elif topic == TOPIC_HEARTBEAT:
             global last_heartbeat_time
             last_heartbeat_time = time.time()
-            # print("[WATCHDOG] 📳 Ping nhận được")  # bỏ comment để debug nếu cần
+            # print("[WATCHDOG] 📳 Ping nhận được")
+
+        # [NEW] Khảo nghiệm sinh tồn SITL
+        elif topic == TOPIC_SIM_CMD:
+            data = json.loads(payload_str)
+            param_id = data.get("param")
+            val = float(data.get("value", 0.0))
+            if param_id:
+                threading.Thread(target=_handle_sim_param, args=(param_id, val), daemon=True).start()
 
     except Exception as e:
         print(f"[MQTT] Lỗi xử lý topic={topic}: {e}")

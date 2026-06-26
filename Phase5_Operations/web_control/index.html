@@ -799,6 +799,59 @@
             </div>
         </div>
 
+        <!-- [NEW] Survival Testing Suite -->
+        <div class="card" style="grid-column: span 2;">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                    🛠️ Khảo nghiệm Sinh Tồn SITL
+                </span>
+                <span class="tag tag-gray">SIM_* PARAMS</span>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <!-- Column 1 -->
+                    <div>
+                        <div class="section-label">Gió giật / Nhiễu loạn (Turbulence)</div>
+                        <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
+                               oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
+                            <span>Level: <span id="turb_val">0</span></span>
+                            <span>Max: 10</span>
+                        </div>
+
+                        <div class="section-label" style="margin-top: 15px;">Ép Tụt Áp (Voltage Sag)</div>
+                        <div class="btn-row">
+                            <button class="btn btn-danger" onclick="sendSimParam('SIM_BATT_VOLTAGE', 9.0)">⚠️ Ép Pin 9V</button>
+                            <button class="btn btn-success" onclick="sendSimParam('SIM_BATT_VOLTAGE', 12.6)">🔋 Sạc đầy 12.6V</button>
+                        </div>
+                    </div>
+
+                    <!-- Column 2 -->
+                    <div>
+                        <div class="section-label">Chết động cơ (Motor Failure)</div>
+                        <div class="btn-row">
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
+                        </div>
+                        <div class="btn-row" style="margin-top: 5px;">
+                            <button class="btn btn-success" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">✅ Khôi phục Động cơ</button>
+                        </div>
+
+                        <div class="section-label" style="margin-top: 15px;">Nhiễu GPS (GPS Glitch)</div>
+                        <div class="btn-row">
+                            <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">❌ Tắt GPS</button>
+                            <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">✅ Bật GPS</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- MQTT Config -->
         <div class="card" style="grid-column: span 2;">
             <div class="card-header">
@@ -922,6 +975,7 @@
     const TOPIC_WEATHER = "iot102_drone/control/weather";    // [NEW]
     const TOPIC_HEARTBEAT = "iot102_drone/control/heartbeat"; // [NEW] Watchdog Ping
     const TOPIC_MISSION   = "iot102_drone/control/mission";   // [NEW] Waypoint Mission
+    const TOPIC_SIM       = "iot102_drone/control/sim_param"; // [NEW] SITL Params
     const CHART_MAX_PTS = 60;
 
     /* Cached DOM refs */
@@ -1254,6 +1308,13 @@
         if (!client || !client.isConnected()) return;
         client.send(buildMsg({ ping: 1 }, TOPIC_HEARTBEAT));
         // addLog(`[PUB] Heartbeat Ping → ${TOPIC_HEARTBEAT}`); // Ẩn bớt log để đỡ trôi
+    }
+
+    /* [NEW] Send Sim Param (Survival Testing Suite) */
+    function sendSimParam(paramName, value) {
+        if (!client || !client.isConnected()) return;
+        client.send(buildMsg({ param: paramName, value: parseFloat(value) }, TOPIC_SIM));
+        addLog(`[PUB] Sim Param: ${paramName} = ${value} → ${TOPIC_SIM}`);
     }
 
     /* Log */
