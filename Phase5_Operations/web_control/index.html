@@ -673,6 +673,13 @@
                         <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">⟲ RTL</button>
                         <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">Reset GUIDED</button>
                     </div>
+                    <!-- [NEW] Waypoint Mission -->
+                    <div style="margin-top: 8px;"></div>
+                    <div class="section-label">Bay tự động (Waypoint)</div>
+                    <div class="btn-row">
+                        <button class="btn btn-primary" onclick="sendMissionCommand('START')">🗓️ START MISSION</button>
+                        <button class="btn btn-secondary" onclick="sendMissionCommand('PAUSE')">⏸️ PAUSE</button>
+                    </div>
                 </div>
 
                 <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
@@ -913,6 +920,8 @@
     const TOPIC_PAYLOAD = "iot102_drone/control/payload";
     const TOPIC_MOTORS  = "iot102_drone/telemetry/motors";   // [NEW]
     const TOPIC_WEATHER = "iot102_drone/control/weather";    // [NEW]
+    const TOPIC_HEARTBEAT = "iot102_drone/control/heartbeat"; // [NEW] Watchdog Ping
+    const TOPIC_MISSION   = "iot102_drone/control/mission";   // [NEW] Waypoint Mission
     const CHART_MAX_PTS = 60;
 
     /* Cached DOM refs */
@@ -1100,10 +1109,15 @@
         client.subscribe(TOPIC_PAYLOAD);
         client.subscribe(TOPIC_MOTORS);  // [NEW]
         addLog("[MQTT] Subscribe: sensors, flight, payload, motors");
+
+        // [NEW] Khởi động Failsafe Heartbeat (mỗi 3 giây)
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        heartbeatTimer = setInterval(sendHeartbeat, 3000);
     }
 
     function onFailure(message) {
         updateUIConnected(false);
+        if (heartbeatTimer) clearInterval(heartbeatTimer); // [NEW] Dừng heartbeat khi mất kết nối
         const err = message.errorMessage || "Network Error";
         addLog("[MQTT] ✗ Kết nối thất bại: " + err);
         if (err.includes("Network Error"))
@@ -1225,6 +1239,21 @@
         if (!client || !client.isConnected()) return;
         client.send(buildMsg({ wind_speed: parseFloat(val) }, TOPIC_WEATHER));
         addLog(`[PUB] Wind Speed ${val} m/s → ${TOPIC_WEATHER}`);
+    }
+
+    /* [NEW] Send Mission Command */
+    function sendMissionCommand(cmd) {
+        if (!client || !client.isConnected()) return;
+        client.send(buildMsg({ command: cmd }, TOPIC_MISSION));
+        addLog(`[PUB] Mission: ${cmd} → ${TOPIC_MISSION}`);
+    }
+
+    /* [NEW] Send Heartbeat Ping */
+    let heartbeatTimer = null;
+    function sendHeartbeat() {
+        if (!client || !client.isConnected()) return;
+        client.send(buildMsg({ ping: 1 }, TOPIC_HEARTBEAT));
+        // addLog(`[PUB] Heartbeat Ping → ${TOPIC_HEARTBEAT}`); // Ẩn bớt log để đỡ trôi
     }
 
     /* Log */

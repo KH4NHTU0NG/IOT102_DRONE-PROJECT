@@ -25,21 +25,27 @@ MQTT_PORT   = 1883
 TOPIC_SENSORS     = "iot102_drone/payload/sensors"
 TOPIC_FLIGHT_CMD  = "iot102_drone/control/flight"
 TOPIC_PAYLOAD_CMD = "iot102_drone/control/payload"
-TOPIC_MOTOR_DATA  = "iot102_drone/telemetry/motors"   # [NEW] PWM 4 động cơ
-TOPIC_WEATHER_CMD = "iot102_drone/control/weather"    # [NEW] Điều khiển gió SITL
+TOPIC_MOTOR_DATA  = "iot102_drone/telemetry/motors"
+TOPIC_WEATHER_CMD = "iot102_drone/control/weather"
+TOPIC_HEARTBEAT   = "iot102_drone/control/heartbeat"  # [NEW] Ping từ Web
+TOPIC_MISSION_CMD = "iot102_drone/control/mission"    # [NEW] Waypoint Mission
 
 SITL_HOST = "127.0.0.1"
 SITL_PORT = 5763
 
+FAILSAFE_TIMEOUT = 15  # [NEW] Giây không có heartbeat → RTL
+
 # --- Shared State ---
-gps_data = {}
+gps_data   = {}
 sensor_data = {}
-motor_data = {"m1": 1000, "m2": 1000, "m3": 1000, "m4": 1000}  # [NEW] PWM motors
-state_lock = threading.Lock()
+motor_data  = {"m1": 1000, "m2": 1000, "m3": 1000, "m4": 1000}
+state_lock  = threading.Lock()
 master_lock = threading.Lock()
 
-master = None         # Global MAVLink connection
-mqtt_pub = None       # [NEW] Global MQTT client ref for publishing from mavlink_loop
+last_heartbeat_time = time.time()  # [NEW] Theo dõi thời gian ping cuối cùng
+
+master  = None   # Global MAVLink connection
+mqtt_pub = None  # Global MQTT client ref
 
 
 def load_token() -> str:
@@ -181,13 +187,15 @@ def _handle_wind_speed(speed: float):
 def on_connect(client, userdata, flags, reason_code, properties):
     global mqtt_pub
     if reason_code == 0:
-        mqtt_pub = client  # [NEW] Lưu ref để dùng trong mavlink_loop
+        mqtt_pub = client
         print(f"[MQTT] ✅ Connected to {MQTT_BROKER}:{MQTT_PORT}")
         client.subscribe(TOPIC_SENSORS)
         client.subscribe(TOPIC_FLIGHT_CMD)
         client.subscribe(TOPIC_PAYLOAD_CMD)
-        client.subscribe(TOPIC_WEATHER_CMD)  # [NEW]
-        print(f"[MQTT] Subscribed: sensors, flight, payload, weather")
+        client.subscribe(TOPIC_WEATHER_CMD)
+        client.subscribe(TOPIC_HEARTBEAT)   # [NEW]
+        client.subscribe(TOPIC_MISSION_CMD) # [NEW]
+        print(f"[MQTT] Subscribed: sensors, flight, payload, weather, heartbeat, mission")
     else:
         print(f"[MQTT] ❌ Connection failed, code={reason_code}")
 
@@ -223,15 +231,32 @@ def on_message(client, userdata, msg):
                 _handle_mode("GUIDED")
                 print("[MAVLINK] Mode reset sang GUIDED")
 
-        elif topic == TOPIC_PAYLOAD_CMD:  # Log payload command (LED/Buzzer/Servo)
+        elif topic == TOPIC_PAYLOAD_CMD:
             data = json.loads(payload_str)
             command = data.get("command", "?")
             print(f"[CMD] Payload: {command} (BW16 subscribes directly)")
 
-        elif topic == TOPIC_WEATHER_CMD:  # [NEW] Điều khiển gió SITL
+        elif topic == TOPIC_WEATHER_CMD:
             data = json.loads(payload_str)
             wind_speed = float(data.get("wind_speed", 0.0))
             threading.Thread(target=_handle_wind_speed, args=(wind_speed,), daemon=True).start()
+
+        # [NEW] Waypoint Mission
+        elif topic == TOPIC_MISSION_CMD:
+            data = json.loads(payload_str)
+            command = data.get("command")
+            if command == "START":
+                threading.Thread(target=_handle_mode, args=("AUTO",), daemon=True).start()
+                print("[MISSION] 🗓️  Chuyển sang mode AUTO → Bắt đầu tuần tra")
+            elif command == "PAUSE":
+                threading.Thread(target=_handle_mode, args=("LOITER",), daemon=True).start()
+                print("[MISSION] ⏸️  LOITER → Tạm dừng tuần tra")
+
+        # [NEW] Heartbeat từ Web (Failsafe Watchdog)
+        elif topic == TOPIC_HEARTBEAT:
+            global last_heartbeat_time
+            last_heartbeat_time = time.time()
+            # print("[WATCHDOG] 📳 Ping nhận được")  # bỏ comment để debug nếu cần
 
     except Exception as e:
         print(f"[MQTT] Lỗi xử lý topic={topic}: {e}")
@@ -344,6 +369,22 @@ def mavlink_loop():
             time.sleep(2)
 
 
+# --- [NEW] Failsafe Watchdog ---
+
+def watchdog_loop():
+    """
+    Kiểm tra mỗi 5 giây xem Web có gửi heartbeat không.
+    Nếu quá FAILSAFE_TIMEOUT giây không nhận được ping → tự động RTL.
+    """
+    print("[WATCHDOG] 👁️  Khởi động Failsafe Watchdog (timeout=15s)")
+    while True:
+        time.sleep(5)  # Kiểm tra mỗi 5 giây
+        elapsed = time.time() - last_heartbeat_time
+        if elapsed > FAILSAFE_TIMEOUT and master is not None:
+            print(f"[WATCHDOG] ⚠️  Mất kết nối Web {elapsed:.0f}s → Gọi RTL!")
+            _handle_mode("RTL")
+
+
 # --- Main ---
 
 def main():
@@ -365,6 +406,7 @@ def main():
         print("[SITL] ⚠️  Không có kết nối SITL. Sẽ thử lại trong background.")
 
     threading.Thread(target=mavlink_loop, daemon=True).start()
+    threading.Thread(target=watchdog_loop, daemon=True).start()  # [NEW] Failsafe
 
     print(f"\n{'=' * 60}")
     print("  🚀 Fusion Loop — Ctrl+C để dừng")
