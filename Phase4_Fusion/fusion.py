@@ -350,53 +350,50 @@ def mavlink_loop():
             continue
 
         try:
-            # Drain buffer to get latest GPS
-            latest_msg = None
+            # [FIX] Dùng recv_msg() để lấy tất cả các tin nhắn trong buffer, không bỏ sót
+            latest_gps = None
+            latest_servo = None
+            latest_attitude = None
+            
             with master_lock:
                 if master is not None:
                     while True:
-                        msg = master.recv_match(type='GLOBAL_POSITION_INT', blocking=False)
+                        msg = master.recv_msg()
                         if msg is None:
                             break
-                        latest_msg = msg
+                        msg_type = msg.get_type()
+                        if msg_type == 'GLOBAL_POSITION_INT':
+                            latest_gps = msg
+                        elif msg_type == 'SERVO_OUTPUT_RAW':
+                            latest_servo = msg
+                        elif msg_type == 'ATTITUDE':
+                            latest_attitude = msg
 
-            if latest_msg is not None:
+            if latest_gps is not None:
                 with state_lock:
                     gps_data = {
-                        "lat": latest_msg.lat / 1e7,
-                        "lon": latest_msg.lon / 1e7,
-                        "alt": latest_msg.relative_alt / 1000.0
+                        "lat": latest_gps.lat / 1e7,
+                        "lon": latest_gps.lon / 1e7,
+                        "alt": latest_gps.relative_alt / 1000.0
                     }
 
-            # [NEW] Đọc SERVO_OUTPUT_RAW → publish motor PWM lên MQTT
-            servo_msg = None
-            with master_lock:
-                if master is not None:
-                    servo_msg = master.recv_match(type='SERVO_OUTPUT_RAW', blocking=False)
-
-            if servo_msg is not None and mqtt_pub is not None:
+            if latest_servo is not None and mqtt_pub is not None:
                 motor_payload = json.dumps({
-                    "m1": servo_msg.servo1_raw,
-                    "m2": servo_msg.servo2_raw,
-                    "m3": servo_msg.servo3_raw,
-                    "m4": servo_msg.servo4_raw,
+                    "m1": latest_servo.servo1_raw,
+                    "m2": latest_servo.servo2_raw,
+                    "m3": latest_servo.servo3_raw,
+                    "m4": latest_servo.servo4_raw,
                 })
                 try:
                     mqtt_pub.publish(TOPIC_MOTOR_DATA, motor_payload)
                 except Exception:
                     pass
 
-            # [NEW] Đọc ATTITUDE → publish góc nghiêng lên MQTT cho 3D Model
-            attitude_msg = None
-            with master_lock:
-                if master is not None:
-                    attitude_msg = master.recv_match(type='ATTITUDE', blocking=False)
-
-            if attitude_msg is not None and mqtt_pub is not None:
+            if latest_attitude is not None and mqtt_pub is not None:
                 attitude_payload = json.dumps({
-                    "roll": attitude_msg.roll,
-                    "pitch": attitude_msg.pitch,
-                    "yaw": attitude_msg.yaw
+                    "roll": latest_attitude.roll,
+                    "pitch": latest_attitude.pitch,
+                    "yaw": latest_attitude.yaw
                 })
                 try:
                     mqtt_pub.publish(TOPIC_ATTITUDE, attitude_payload)
