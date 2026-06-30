@@ -13,7 +13,7 @@
 // --- Network Config ---
 const char* ssid        = SECRET_SSID;
 const char* password    = SECRET_PASS;
-const char* mqtt_server = "broker.hivemq.com";
+const char* mqtt_server = "broker.emqx.io";
 const char* topic_sensors = "iot102_drone/payload/sensors";
 const char* topic_payload = "iot102_drone/control/payload";
 const int   mqtt_port   = 1883;
@@ -49,7 +49,7 @@ const int   CO2_THRESHOLD      = 600;
 const int   WIFI_MAX_RETRIES   = 30;
 const int   MQTT_MAX_RETRIES   = 5;
 const int   MQTT_RETRY_DELAY   = 3000;
-const int   MQTT_KEEPALIVE     = 60;
+const int   CUSTOM_MQTT_KEEPALIVE = 60;
 const unsigned long MQ135_WARMUP_MS  = 30000;
 const uint8_t OLED_I2C_ADDR    = 0x3C;
 
@@ -58,6 +58,16 @@ bool mqtt_buzzer_override = false;
 bool mqtt_buzzer_state    = false;
 bool mqtt_led_override    = false;
 bool mqtt_led_state       = false;
+
+// --- SITL Flight State for Downstream ---
+String flight_mode = "DISCONN";
+bool   drone_armed = false;
+float  flight_alt  = 0.0;
+float  flight_spd  = 0.0;
+float  flight_batt = 12.6;
+float  flight_wind = 0.0;
+int    flight_fence = 0; // 0: OFF, 1: OK, 2: BREACH
+unsigned long lastTelemetryTime = 0;
 
 // --- Objects ---
 WiFiClient   wifiClient;
@@ -119,6 +129,33 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print("[MQTT] ");
     Serial.println(msgString);
 
+    // 1. Check if this is a downstream telemetry JSON packet from SITL
+    String modeStr = parseJsonField(msgString, "mode");
+    if (modeStr.length() > 0) {
+        flight_mode = modeStr;
+        lastTelemetryTime = millis();
+        
+        String armedStr = parseJsonField(msgString, "armed");
+        drone_armed = (armedStr == "1" || armedStr == "true");
+
+        String altStr = parseJsonField(msgString, "alt");
+        if (altStr.length() > 0) flight_alt = altStr.toFloat();
+
+        String spdStr = parseJsonField(msgString, "spd");
+        if (spdStr.length() > 0) flight_spd = spdStr.toFloat();
+
+        String battStr = parseJsonField(msgString, "batt");
+        if (battStr.length() > 0) flight_batt = battStr.toFloat();
+
+        String windStr = parseJsonField(msgString, "wind");
+        if (windStr.length() > 0) flight_wind = windStr.toFloat();
+
+        String fenceStr = parseJsonField(msgString, "fence");
+        if (fenceStr.length() > 0) flight_fence = fenceStr.toInt();
+        return; // Terminate callback processing for telemetry packets
+    }
+
+    // 2. Otherwise process command payload overrides
     String command = parseJsonField(msgString, "command");
 
     if (command == "BUZZER_ON") {
@@ -254,7 +291,7 @@ void setup() {
     wifiClient.setBlockingMode();
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
-    client.setKeepAlive(MQTT_KEEPALIVE);
+    client.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
 
     Serial.println("[INIT] Setup complete!");
 }
@@ -335,24 +372,75 @@ void updateOLED(bool env_alert) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
+    // 1. Dòng 1: WiFi/MQTT Status & Flight Mode
     display.setCursor(0, 0);
-    display.print("WIFI:");
-    display.print(WiFi.status() == WL_CONNECTED ? "OK" : "NO");
-    display.print(" MQTT:");
-    display.print(client.connected() ? "OK" : "NO");
+    display.print(WiFi.status() == WL_CONNECTED ? "W:OK" : "W:NO");
+    display.print(client.connected() ? " M:OK" : " M:NO");
+    display.print(" | ");
+    
+    // Kiểm tra Watchdog Link Lost (5 giây không nhận được telemetry)
+    bool link_lost = (millis() - lastTelemetryTime > 5000);
+    if (link_lost) {
+        display.print("L-LOST");
+    } else {
+        display.print(flight_mode);
+        display.print(drone_armed ? "*" : "");
+    }
 
-    display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+    display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
 
-    display.setCursor(0, 14);
-    display.print("Temp: "); display.print(temp_val, 1); display.println(" C");
-    display.print("Hum : "); display.print(hum_val, 1); display.println(" %");
-    display.print("CO2 : "); display.print(mq_raw_val); display.println(" ADC");
-    display.print("RSSI: "); display.print((int)WiFi.RSSI()); display.println(" dBm");
+    // 2. Dòng 2: Độ cao (ALT) và Tốc độ bay (SPD)
+    display.setCursor(0, 12);
+    display.print("ALT: ");
+    if (link_lost) display.print("--");
+    else { display.print(flight_alt, 1); display.print("m"); }
+    
+    display.setCursor(68, 12);
+    display.print("SPD:");
+    if (link_lost) display.print("--");
+    else { display.print(flight_spd, 1); display.print("m/s"); }
 
-    display.drawLine(0, 50, 128, 50, SSD1306_WHITE);
-    display.setCursor(0, 54);
+    // 3. Dòng 3: Điện áp PIN (BATT) và Tốc độ gió giật (WIND)
+    display.setCursor(0, 22);
+    display.print("BAT: ");
+    if (link_lost) display.print("--");
+    else { display.print(flight_batt, 1); display.print("V"); }
+    
+    display.setCursor(68, 22);
+    display.print("WND:");
+    if (link_lost) display.print("--");
+    else { display.print(flight_wind, 1); display.print("m/s"); }
+
+    display.drawLine(0, 31, 128, 31, SSD1306_WHITE);
+
+    // 4. Dòng 4: Hàng rào ảo (FENCE) và Trạng thái cảm biến thật (DHT22)
+    display.setCursor(0, 34);
+    display.print("FENCE: ");
+    if (link_lost || flight_fence == 0) display.print("OFF");
+    else if (flight_fence == 1) display.print("OK");
+    else display.print("BREACH");
+
+    display.setCursor(68, 34);
+    // Kiểm tra xem DHT22 có hoạt động bình thường không
+    bool dht_ok = !(isnan(temp_val) || isnan(hum_val) || (temp_val == 0.0 && hum_val == 0.0));
+    display.print("DHT: ");
+    display.print(dht_ok ? "OK" : "ERR");
+
+    display.drawLine(0, 43, 128, 43, SSD1306_WHITE);
+
+    // 5. Dòng 5 & 6: Khí Gas/CO2 và Trạng thái cảnh báo tổng thể
+    display.setCursor(0, 46);
+    display.print("GAS/CO2: ");
+    display.print(mq_raw_val);
+    display.print(" ADC");
+
+    display.setCursor(0, 56);
     if (env_alert) {
         display.print("! GAS/ENV ALERT !");
+    } else if (link_lost) {
+        display.print("CONNECTING SITL...");
+    } else if (flight_fence == 2) {
+        display.print("! FENCE BREACH (RTL) !");
     } else {
         display.print("SYSTEM NORMAL");
     }

@@ -9,6 +9,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- [NEW] Leaflet CSS for Live Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
     <style>
         /* Reset & Base */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -474,6 +479,18 @@
             resize: vertical;
             outline: none;
         }
+
+        /* [NEW] Map Container */
+        #map_container {
+            width: 100%;
+            height: 250px;
+            background: #0b0c10;
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-top: 10px;
+            border: 1px solid var(--border);
+        }
+
         /* [NEW] 3D Attitude Container */
         #drone3d_container {
             width: 100%;
@@ -482,6 +499,12 @@
             border-radius: var(--radius);
             overflow: hidden;
             margin-top: 10px;
+        }
+        #map {
+            width: 100%;
+            height: 250px;
+            border-radius: var(--radius);
+            z-index: 0;
         }
         .att-grid {
             display: grid;
@@ -615,7 +638,30 @@
                 <div class="topbar-subtitle">BW16 RTL8720DN + ArduPilot SITL</div>
             </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <!-- Flight Mode Badge -->
+            <div id="flight_mode_badge" style="
+                display:flex; align-items:center; gap:5px;
+                background:#1f2937; color:#9ca3af;
+                font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700;
+                padding:4px 10px; border-radius:4px; letter-spacing:.04em;
+            ">
+                <span style="color:#4b5563">■</span>
+                <span id="flight_mode_text">--</span>
+            </div>
+            <!-- Armed/Disarmed Badge -->
+            <div id="armed_badge" style="
+                background:#1f2937; color:#4b5563;
+                font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
+                padding:4px 10px; border-radius:4px; letter-spacing:.06em;
+                text-transform:uppercase;
+            " id="armed_badge">DISARMED</div>
+            <!-- CMD Status -->
+            <div id="cmd_status_badge" style="
+                max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                font-size:10px; color:var(--text-3);
+            "></div>
+            <!-- MQTT Status -->
             <div id="status_badge" class="status err">
                 <span class="status-dot"></span>
                 <span id="status_text">Chưa kết nối</span>
@@ -691,13 +737,24 @@
                         <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">⟲ RTL</button>
                         <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">Reset GUIDED</button>
                     </div>
+                    <div style="margin-top: 8px;"></div>
+                    <div class="section-label">Chế độ tự cân bằng (Stabilization)</div>
+                    <div class="btn-row">
+                        <button id="btn_mode_loiter" class="btn btn-primary" onclick="sendFlightCommand('LOITER')" style="font-size:11px;">🚁 LOITER (Giữ Vị Trí)</button>
+                        <button id="btn_mode_althold" class="btn btn-secondary" onclick="sendFlightCommand('ALT_HOLD')" style="font-size:11px;">🎈 ALT_HOLD (Giữ Cao)</button>
+                        <button id="btn_mode_stabilize" class="btn btn-secondary" onclick="sendFlightCommand('STABILIZE')" style="font-size:11px;">⚖️ STABILIZE (Cân Bằng)</button>
+                    </div>
                     <!-- [NEW] Waypoint Mission -->
                     <div style="margin-top: 8px;"></div>
-                    <div class="section-label">Bay tự động (Waypoint)</div>
+                    <div class="section-label">Bay tự động (Waypoint Mission)</div>
                     <div class="btn-row">
                         <button class="btn btn-primary" onclick="sendMissionCommand('START')">🗓️ START MISSION</button>
                         <button class="btn btn-secondary" onclick="sendMissionCommand('PAUSE')">⏸️ PAUSE</button>
                     </div>
+
+                    <div style="margin-top: 8px;"></div>
+                    <div class="section-label" style="color: #dc2626;">🚨 Khẩn cấp</div>
+                    <button class="btn btn-danger btn-full" onclick="sendFlightCommand('RECOVERY')" style="font-weight:700;">🔄 PHỤC HỒI SAU FAILSAFE</button>
                 </div>
 
                 <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
@@ -715,11 +772,90 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </div>        <!-- Survival Testing Suite -->
+        <div class="card" style="grid-column: span 3;">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                    🛠️ Khảo nghiệm Sinh Tồn SITL
+                </span>
+                <span class="tag tag-gray">SIM_* PARAMS</span>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
 
-    <!-- Bottom Grid: Servo + MQTT Config -->
-    <div class="grid-bottom">
+                    <!-- Col 1: Wind / Turbulence -->
+                    <div>
+                        <div class="section-label">💨 Gió mô phỏng (SIM_WIND_SPD)</div>
+                        <div class="wind-display">
+                            <span class="wind-val" id="wind_val_display">0 m/s</span>
+                            <span class="servo-label">Tốc độ gió</span>
+                        </div>
+                        <input type="range" id="wind_slider" min="0" max="25" step="1" value="0"
+                               oninput="sendWindSpeed(this.value)">
+                        <div class="wind-scale">
+                            <span>0 (Lặng)</span>
+                            <span>13 (Cấp 6)</span>
+                            <span>25 (Bão)</span>
+                        </div>
+                        <div class="btn-row" style="margin-top:10px;">
+                            <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">🌤 Lặng</button>
+                            <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">🌪 Cấp 7</button>
+                        </div>
+
+                        <div class="section-label" style="margin-top:14px;">Nhiễu loạn (SIM_WIND_TURB)</div>
+                        <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
+                               oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3);">
+                            <span>Level: <span id="turb_val">0</span></span>
+                            <span>Max: 10</span>
+                        </div>
+                    </div>
+
+                    <!-- Col 2: Motor Failure -->
+                    <div>
+                        <div class="section-label">🔧 Chết động cơ (Motor Failure)</div>
+                        <div class="btn-row">
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
+                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
+                        </div>
+                        <div class="btn-row" style="margin-top:6px;">
+                            <button class="btn btn-success btn-full" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">✅ Khôi phục tất cả động cơ</button>
+                        </div>
+
+                        <div class="section-label" style="margin-top:14px;">📶 Nhiễu GPS (GPS Glitch)</div>
+                        <div class="btn-row">
+                            <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">❌ Tắt GPS</button>
+                            <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">✅ Bật GPS</button>
+                        </div>
+                    </div>
+
+                    <!-- Col 3: Geofence -->
+                    <div>
+                        <div class="section-label">🛡️ Hàng rào điện tử (Geofence)</div>
+                        <div style="font-size:11px; color:var(--text-3); margin-bottom:10px; line-height:1.5;">
+                            Khi bật: Nếu drone bay quá <strong>50m</strong> khỏi điểm xuất phát,
+                            hệ thống tự động kích hoạt <strong>RTL</strong> để quảy về.
+                        </div>
+                        <div id="geo_status" style="font-size:11px; font-weight:600; color:var(--text-3); margin-bottom:8px;">⚪ Trạng thái: Tắt</div>
+                        <div class="btn-row">
+                            <button class="btn btn-warning btn-full" onclick="enableGeofence()">🛡️ Bật Geofence Failsafe</button>
+                        </div>
+                        <div class="btn-row" style="margin-top:6px;">
+                            <button class="btn btn-secondary btn-full" onclick="disableGeofence()">Tắt Geofence</button>
+                        </div>
+
+                        <div class="section-label" style="margin-top:14px;">Reset toàn bộ</div>
+                        <button class="btn btn-secondary btn-full" onclick="resetAllSim()">🔄 Reset SITL về mặc định</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
 
         <!-- Servo -->
         <div class="card">
@@ -743,6 +879,88 @@
                 <div class="btn-row">
                     <button class="btn btn-primary" onclick="sendServoCommand(90)">Mở — 90°</button>
                     <button class="btn btn-secondary" onclick="sendServoCommand(0)">Đóng — 0°</button>
+                </div>
+            </div>
+        </div>
+
+        
+        <!-- 3D Telemetry & GPS View -->
+        <div class="card" style="grid-column: span 3;">
+            <div class="card-header">
+                <span class="card-title">
+                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        <path d="M2 12h20"/>
+                    </svg>
+                    Mô hình 3D &amp; Tọa độ GPS
+                </span>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span id="eng_st" style="font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:.05em;">STANDBY</span>
+                    <span class="tag tag-blue">SITL LIVE</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div style="display:grid; grid-template-columns:1fr 1.8fr 1fr; gap:20px; align-items:start;">
+
+                    <!-- LEFT: 3D Drone Model -->
+                    <div>
+                        <div class="section-label">Mô hình 3D Drone</div>
+                        <div id="drone3d_container"></div>
+                        <div class="att-grid" style="margin-top:10px;">
+                            <div>
+                                <span class="att-val" id="att_r" style="color:#3b82f6;">0.0°</span>
+                                <span class="att-lab">Roll</span>
+                            </div>
+                            <div>
+                                <span class="att-val" id="att_p" style="color:#8b5cf6;">0.0°</span>
+                                <span class="att-lab">Pitch</span>
+                            </div>
+                            <div>
+                                <span class="att-val" id="att_y" style="color:#06b6d4;">0.0°</span>
+                                <span class="att-lab">Yaw</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CENTER: Live Map -->
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <div class="section-label" style="margin:0;">Bản đồ hành trình (Live Trajectory)</div>
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn btn-secondary" style="font-size:10px; padding:3px 8px;" onclick="clearMap()">🗑️ Xóa</button>
+                                <button class="btn btn-primary" style="font-size:10px; padding:3px 8px;" onclick="uploadMission()">📤 Upload</button>
+                            </div>
+                        </div>
+                        <div id="map"></div>
+                        <div style="font-size:10px; color:var(--text-3); margin-top:5px;">
+                            👆 Click lên bản đồ để đặt Waypoint. Đường đỏ = quỹ đạo thực. Đường xanh = mission.
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: GPS Data -->
+                    <div>
+                        <div class="section-label">Tọa độ định vị (GPS)</div>
+                        <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
+                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Vĩ độ (Lat)</div>
+                                <div id="chart_gps_lat_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#10b981; margin-top:2px;">--</div>
+                            </div>
+                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
+                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Kinh độ (Lon)</div>
+                                <div id="chart_gps_lon_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#10b981; margin-top:2px;">--</div>
+                            </div>
+                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
+                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Độ cao (Alt)</div>
+                                <div id="chart_gps_alt_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#3b82f6; margin-top:2px;">-- m</div>
+                            </div>
+                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
+                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Waypoints đang chờ</div>
+                                <div id="wp_count_display" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#f59e0b; margin-top:2px;">0 điểm</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -788,108 +1006,6 @@
         </div>
 
         <!-- [NEW] Weather Control -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
-                    </svg>
-                    Môi trường SITL
-                </span>
-                <span class="tag tag-gray">SIM_WIND_SPD</span>
-            </div>
-            <div class="card-body">
-                <div class="wind-display">
-                    <span class="wind-val" id="wind_val_display">0 m/s</span>
-                    <span class="servo-label">Tốc độ gió mô phỏng</span>
-                </div>
-                <input type="range" id="wind_slider" min="0" max="25" step="1" value="0"
-                       oninput="sendWindSpeed(this.value)">
-                <div class="wind-scale">
-                    <span>0 m/s (Lặng)</span>
-                    <span>13 (Cấp 6)</span>
-                    <span>25 (Bão)</span>
-                </div>
-                <div class="btn-row" style="margin-top:10px;">
-                    <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">🌤 Lặng gió</button>
-                    <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">🌪 Bão cấp 7</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- [NEW] Survival Testing Suite -->
-        <div class="card" style="grid-column: span 2;">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                    </svg>
-                    🛠️ Khảo nghiệm Sinh Tồn SITL
-                </span>
-                <span class="tag tag-gray">SIM_* PARAMS</span>
-            </div>
-            <div class="card-body">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <!-- Column 1 -->
-                    <div>
-                        <div class="section-label">Gió giật / Nhiễu loạn (Turbulence)</div>
-                        <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
-                               oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
-                            <span>Level: <span id="turb_val">0</span></span>
-                            <span>Max: 10</span>
-                        </div>
-
-                        <div class="section-label" style="margin-top: 15px;">Ép Tụt Áp (Voltage Sag)</div>
-                        <div class="btn-row">
-                            <button class="btn btn-danger" onclick="sendSimParam('SIM_BATT_VOLTAGE', 9.0)">⚠️ Ép Pin 9V</button>
-                            <button class="btn btn-success" onclick="sendSimParam('SIM_BATT_VOLTAGE', 12.6)">🔋 Sạc đầy 12.6V</button>
-                        </div>
-                    </div>
-
-                    <!-- Column 2 -->
-                    <div>
-                        <div class="section-label">Chết động cơ (Motor Failure)</div>
-                        <div class="btn-row">
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
-                        </div>
-                        <div class="btn-row" style="margin-top: 5px;">
-                            <button class="btn btn-success" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">✅ Khôi phục Động cơ</button>
-                        </div>
-
-                        <div class="section-label" style="margin-top: 15px;">Nhiễu GPS (GPS Glitch)</div>
-                        <div class="btn-row">
-                            <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">❌ Tắt GPS</button>
-                            <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">✅ Bật GPS</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- [NEW] 3D Telemetry View -->
-        <div class="card" style="grid-column: span 2;">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2l8 4-8 4-8-4 8-4z"/><path d="M2 12l8 4 8-4M2 18l8 4 8-4"/>
-                    </svg>
-                    Góc nghiêng 3D
-                </span>
-                <span class="tag tag-gray" id="eng_st">STANDBY</span>
-            </div>
-            <div class="card-body">
-                <div id="drone3d_container"></div>
-                <div class="att-grid">
-                    <div><span class="att-lab">Roll</span><span class="att-val" id="att_r">0.0</span></div>
-                    <div><span class="att-lab">Pitch</span><span class="att-val" id="att_p">0.0</span></div>
-                    <div><span class="att-lab">Yaw</span><span class="att-val" id="att_y">0.0</span></div>
-                </div>
-            </div>
-        </div>
 
         <!-- MQTT Config -->
         <div class="card" style="grid-column: span 2;">
@@ -906,11 +1022,11 @@
                 <div class="config-row">
                     <div class="field">
                         <label>Broker Host</label>
-                        <input type="text" id="mqtt_host" value="broker.hivemq.com" placeholder="broker.hivemq.com">
+                        <input type="text" id="mqtt_host" value="broker.emqx.io" placeholder="broker.emqx.io">
                     </div>
                     <div class="field">
                         <label>WebSocket Port</label>
-                        <input type="number" id="mqtt_port" value="8000" placeholder="8000">
+                        <input type="number" id="mqtt_port" value="8083" placeholder="8083">
                     </div>
                     <button id="btn_connect_2" class="btn btn-connect-on" onclick="toggleConnection()">Kết nối</button>
                 </div>
@@ -1000,7 +1116,7 @@
     <!-- Footer -->
     <div class="footer">
         <span>Drone IoT — BW16 RTL8720DN + ArduPilot SITL + InfluxDB</span>
-        <span>MQTT WebSocket :8000</span>
+        <span>MQTT WebSocket :8083 (EMQX)</span>
     </div>
 
 </div>
@@ -1015,7 +1131,9 @@
     const TOPIC_HEARTBEAT = "iot102_drone/control/heartbeat"; // [NEW] Watchdog Ping
     const TOPIC_MISSION   = "iot102_drone/control/mission";   // [NEW] Waypoint Mission
     const TOPIC_SIM       = "iot102_drone/control/sim_param"; // [NEW] SITL Params
-    const TOPIC_ATTITUDE  = "iot102_drone/telemetry/attitude";// [NEW] 3D Attitude
+    const TOPIC_ATTITUDE  = "iot102_drone/telemetry/attitude";
+    const TOPIC_GPS       = "iot102_drone/telemetry/gps";
+    const TOPIC_STATUS    = "iot102_drone/telemetry/status";  // [FIX] Phản hồi trạng thái bay
     const CHART_MAX_PTS = 60;
 
     /* Cached DOM refs */
@@ -1127,11 +1245,11 @@
 
     /* Connection */
     function startConnection() {
-        const host = hostInput.value.trim() || 'broker.hivemq.com';
+        const host = hostInput.value.trim() || 'broker.emqx.io';
         const isHttps = window.location.protocol === 'https:';
         let port = Number(portInput.value);
-        if (!port) port = (isHttps || host.includes("hivemq.com")) ? (isHttps ? 8884 : 8000) : 8000;
-        const useSSL = isHttps || port === 8884 || port === 443;
+        if (!port) port = isHttps ? 8084 : 8083;
+        const useSSL = isHttps || port === 8084 || port === 443 || port === 8884;
         const clientId = 'web_' + Math.random().toString(16).slice(2, 10);
 
         addLog(`[CONN] Đang kết nối ${useSSL ? 'wss' : 'ws'}://${host}:${port}/mqtt ...`);
@@ -1203,7 +1321,9 @@
         client.subscribe(TOPIC_PAYLOAD);
         client.subscribe(TOPIC_MOTORS);  // [NEW]
         client.subscribe(TOPIC_ATTITUDE);// [NEW]
-        addLog("[MQTT] Subscribe: sensors, flight, payload, motors, attitude");
+        client.subscribe(TOPIC_GPS);     // [NEW]
+        client.subscribe(TOPIC_STATUS);  // [FIX] Flight status feedback
+        addLog("[MQTT] Subscribe: sensors, flight, payload, motors, attitude, gps");
 
         // [NEW] Khởi động Failsafe Heartbeat (mỗi 3 giây)
         if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -1244,13 +1364,58 @@
                     updateMotorBars(m);
                     if (typeof updatePropellerSpeeds === 'function') updatePropellerSpeeds(m);
                 } catch(e) {}
+            
+            } else if (topic === TOPIC_GPS) {
+                try {
+                    const g = JSON.parse(payload);
+                    document.getElementById('chart_gps_lat_latest').textContent = g.lat.toFixed(7);
+                    document.getElementById('chart_gps_lon_latest').textContent = g.lon.toFixed(7);
+                    document.getElementById('chart_gps_alt_latest').textContent = g.alt.toFixed(1) + ' m';
+                    updateMap(g.lat, g.lon);
+                } catch(e) {}
+            } else if (topic === TOPIC_STATUS) {
+                try {
+                    const s = JSON.parse(payload);
+                    // Update mode badge
+                    const modeBadge  = document.getElementById('flight_mode_text');
+                    const modeWrap   = document.getElementById('flight_mode_badge');
+                    const armedBadge = document.getElementById('armed_badge');
+                    const cmdBadge   = document.getElementById('cmd_status_badge');
+
+                    if (s.mode && modeBadge) {
+                        modeBadge.textContent = s.mode;
+                        const colors = { GUIDED:'#3b82f6', AUTO:'#8b5cf6', LAND:'#f59e0b',
+                                         RTL:'#ef4444', LOITER:'#10b981', STABILIZE:'#06b6d4' };
+                        modeWrap.style.color  = colors[s.mode] || '#9ca3af';
+                        modeWrap.querySelector('span').style.color = colors[s.mode] || '#4b5563';
+                    }
+
+                    if (s.armed !== undefined && armedBadge) {
+                        armedBadge.textContent  = s.armed ? 'ARMED ⚡' : 'DISARMED';
+                        armedBadge.style.color  = s.armed ? '#dc2626' : '#4b5563';
+                        armedBadge.style.background = s.armed ? '#450a0a' : '#1f2937';
+                    }
+
+                    if (s.status && cmdBadge) {
+                        const icons = { ARMED:'✅', DISARMED:'🔒', FLYING:'🚀', BUSY:'⏳',
+                                        OK:'✅', WARN:'⚠️', ERROR:'❌' };
+                        cmdBadge.textContent = `${icons[s.status] || ''} ${s.detail || s.status}`;
+                        cmdBadge.style.color = s.status === 'ERROR' ? '#dc2626' :
+                                               s.status === 'WARN'  ? '#f59e0b' :
+                                               s.status === 'BUSY'  ? '#06b6d4' : '#10b981';
+                        setTimeout(() => { if(cmdBadge) cmdBadge.textContent = ''; }, 5000);
+                    }
+                } catch(e) {}
             } else if (topic === TOPIC_ATTITUDE) {
                 try {
                     const a = JSON.parse(payload);
                     if (typeof updateDrone3D === 'function') updateDrone3D(a);
                 } catch(e) {}
             } else {
-                addLog(`[SUB] [${topic}] ${payload}`);
+                // Ignore other background logs unless they are not telemetry
+                if (!topic.includes("telemetry") && !topic.includes("sensors")) {
+                    addLog(`[SUB] [${topic}] ${payload}`);
+                }
             }
             return;
         }
@@ -1359,9 +1524,134 @@
 
     /* [NEW] Send Sim Param (Survival Testing Suite) */
     function sendSimParam(paramName, value) {
-        if (!client || !client.isConnected()) return;
+        if (!client || !isConnected) { addLog('[ERR] Chưa kết nối MQTT'); return; }
         client.send(buildMsg({ param: paramName, value: parseFloat(value) }, TOPIC_SIM));
         addLog(`[PUB] Sim Param: ${paramName} = ${value} → ${TOPIC_SIM}`);
+    }
+
+    /* Geofence Failsafe */
+    function enableGeofence() {
+        if (!client || !isConnected) { addLog('[ERR] Chưa kết nối MQTT'); return; }
+        sendSimParam('FENCE_ENABLE', 1);
+        setTimeout(() => sendSimParam('FENCE_TYPE', 2), 300);
+        setTimeout(() => sendSimParam('FENCE_RADIUS', 50), 600);
+        setTimeout(() => sendSimParam('FENCE_ACTION', 1), 900);
+        if (geofenceCircle && typeof geofenceCircle.setStyle === 'function') {
+            geofenceCircle.setStyle({ color: 'orange', fillOpacity: 0.15 });
+        }
+        const st = document.getElementById('geo_status');
+        if (st) { st.textContent = '🟠 Trạng thái: Đã bật (RTL 50m)'; st.style.color = '#f59e0b'; }
+        addLog('[GEO] ✅ Hàng rào điện tử 50m đã bật — RTL nếu vi phạm');
+    }
+
+    function disableGeofence() {
+        sendSimParam('FENCE_ENABLE', 0);
+        if (geofenceCircle && typeof geofenceCircle.setStyle === 'function') {
+            geofenceCircle.setStyle({ color: 'gray', fillOpacity: 0.05 });
+        }
+        const st = document.getElementById('geo_status');
+        if (st) { st.textContent = '⚪ Trạng thái: Tắt'; st.style.color = 'var(--text-3)'; }
+        addLog('[GEO] Hàng rào điện tử đã tắt');
+    }
+
+    function resetAllSim() {
+        if (!client || !isConnected) { addLog('[ERR] Chưa kết nối MQTT'); return; }
+        sendSimParam('SIM_ENGINE_FAIL', 0);
+        setTimeout(() => sendSimParam('SIM_GPS_DISABLE', 0), 200);
+        setTimeout(() => sendSimParam('SIM_WIND_TURB', 0), 400);
+        setTimeout(() => { sendWindSpeed(0); document.getElementById('wind_slider').value = 0; document.getElementById('turb_slider').value = 0; document.getElementById('turb_val').innerText = 0; }, 600);
+        setTimeout(() => disableGeofence(), 800);
+        addLog('[SIM] 🔄 Đã reset toàn bộ tham số SITL về mặc định');
+    }
+
+    /* ============================================================
+       MAP — Leaflet.js Live Trajectory + Waypoint Mission
+    ============================================================ */
+    let map = null;
+    let droneMapMarker = null;
+    let droneTrail = null;
+    let waypoints = [];
+    let waypointMarkers = [];
+    let waypointPolyline = null;
+    let geofenceCircle = null;
+    let mapInitialized = false;
+    let droneIcon = null;
+
+    function initMap(lat, lon) {
+        if (mapInitialized) return;
+        const container = document.getElementById('map');
+        if (!container) return;
+        if (typeof L === 'undefined') {
+            addLog('[MAP] Leaflet chưa tải được. Kiểm tra kết nối mạng.');
+            return;
+        }
+        map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([lat, lon], 18);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 22
+        }).addTo(map);
+
+        droneIcon = L.divIcon({
+            html: '<div style="font-size:22px;line-height:1;">🚁</div>',
+            className: '',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+        });
+        droneMapMarker = L.marker([lat, lon], { icon: droneIcon }).addTo(map).bindTooltip('Drone');
+        droneTrail = L.polyline([], { color: '#ef4444', weight: 2, opacity: 0.7 }).addTo(map);
+        waypointPolyline = L.polyline([], { color: '#3b82f6', weight: 2, dashArray: '6 4' }).addTo(map);
+        geofenceCircle = L.circle([lat, lon], {
+            radius: 50, color: 'gray', weight: 1.5,
+            fillColor: '#f59e0b', fillOpacity: 0.05
+        }).addTo(map).bindTooltip('Geofence 50m');
+
+        map.on('click', function(e) {
+            const n = waypoints.length + 1;
+            waypoints.push([e.latlng.lat, e.latlng.lng]);
+            const m = L.circleMarker(e.latlng, {
+                radius: 6, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.9, weight: 2
+            }).addTo(map).bindTooltip('WP' + n);
+            waypointMarkers.push(m);
+            waypointPolyline.setLatLngs(waypoints);
+            addLog(`[MAP] Thêm Waypoint ${n}: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`);
+        });
+
+        mapInitialized = true;
+        addLog('[MAP] Bản đồ đã khởi động!');
+    }
+
+    function updateMap(lat, lon) {
+        if (!mapInitialized) {
+            initMap(lat, lon);
+            return;
+        }
+        droneMapMarker.setLatLng([lat, lon]);
+        droneTrail.addLatLng([lat, lon]);
+        const trailCoords = droneTrail.getLatLngs();
+        if (trailCoords.length > 200) droneTrail.setLatLngs(trailCoords.slice(-200));
+    }
+
+    function clearMap() {
+        if (!mapInitialized) return;
+        waypoints = [];
+        waypointMarkers.forEach(m => map.removeLayer(m));
+        waypointMarkers = [];
+        waypointPolyline.setLatLngs([]);
+        droneTrail.setLatLngs([]);
+        const wp_el = document.getElementById('wp_count_display');
+        if (wp_el) wp_el.textContent = '0 điểm';
+        addLog('[MAP] Đã xóa tất cả waypoints và quỹ đạo');
+    }
+
+    function uploadMission() {
+        if (!client || !isConnected) { addLog('[ERR] Chưa kết nối MQTT'); return; }
+        if (waypoints.length === 0) {
+            addLog('[MAP] ⚠️ Vui lòng click lên bản đồ để tạo waypoint trước!');
+            return;
+        }
+        const pts = waypoints.map(wp => ({ lat: wp[0], lon: wp[1] }));
+        client.send(buildMsg({ command: 'UPLOAD', points: pts }, TOPIC_MISSION));
+        addLog(`[MAP] 📤 Đang upload ${pts.length} waypoint lên Drone...`);
     }
 
     /* Log */
@@ -1382,7 +1672,8 @@
 
     /* Init */
     updateUIConnected(false);
-    startConnection();
+    // Auto-connect on load
+    setTimeout(startConnection, 500);
 
     /* ==============================================================
        [NEW] THREE.JS 3D DRONE MODEL IMPLEMENTATION
