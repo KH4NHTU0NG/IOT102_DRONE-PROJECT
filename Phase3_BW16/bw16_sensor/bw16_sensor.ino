@@ -372,8 +372,8 @@ void updateOLED(bool env_alert) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
-    // 1. Dòng 1: WiFi/MQTT Status & Flight Mode
-    display.setCursor(0, 0);
+    // 1. Dòng 1: WiFi/MQTT Status & Flight Mode (Nằm trọn trong vùng màu VÀNG)
+    display.setCursor(0, 2);
     display.print(WiFi.status() == WL_CONNECTED ? "W:OK" : "W:NO");
     display.print(client.connected() ? " M:OK" : " M:NO");
     display.print(" | ");
@@ -387,54 +387,55 @@ void updateOLED(bool env_alert) {
         display.print(drone_armed ? "*" : "");
     }
 
-    display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
+    // Đường kẻ phân cách 1: Đặt tại y=14 để phân tách ranh giới màu Vàng/Xanh (y=16)
+    display.drawLine(0, 14, 128, 14, SSD1306_WHITE);
 
-    // 2. Dòng 2: Độ cao (ALT) và Tốc độ bay (SPD)
-    display.setCursor(0, 12);
+    // 2. Dòng 2: Độ cao (ALT) và Tốc độ bay (SPD) (Nằm trọn trong vùng màu XANH)
+    display.setCursor(0, 17);
     display.print("ALT: ");
     if (link_lost) display.print("--");
     else { display.print(flight_alt, 1); display.print("m"); }
     
-    display.setCursor(68, 12);
+    display.setCursor(68, 17);
     display.print("SPD:");
     if (link_lost) display.print("--");
     else { display.print(flight_spd, 1); display.print("m/s"); }
 
     // 3. Dòng 3: Điện áp PIN (BATT) và Tốc độ gió giật (WIND)
-    display.setCursor(0, 22);
+    display.setCursor(0, 26);
     display.print("BAT: ");
     if (link_lost) display.print("--");
     else { display.print(flight_batt, 1); display.print("V"); }
     
-    display.setCursor(68, 22);
+    display.setCursor(68, 26);
     display.print("WND:");
     if (link_lost) display.print("--");
     else { display.print(flight_wind, 1); display.print("m/s"); }
 
-    display.drawLine(0, 31, 128, 31, SSD1306_WHITE);
+    display.drawLine(0, 35, 128, 35, SSD1306_WHITE);
 
     // 4. Dòng 4: Hàng rào ảo (FENCE) và Trạng thái cảm biến thật (DHT22)
-    display.setCursor(0, 34);
+    display.setCursor(0, 38);
     display.print("FENCE: ");
     if (link_lost || flight_fence == 0) display.print("OFF");
     else if (flight_fence == 1) display.print("OK");
     else display.print("BREACH");
 
-    display.setCursor(68, 34);
+    display.setCursor(68, 38);
     // Kiểm tra xem DHT22 có hoạt động bình thường không
     bool dht_ok = !(isnan(temp_val) || isnan(hum_val) || (temp_val == 0.0 && hum_val == 0.0));
     display.print("DHT: ");
     display.print(dht_ok ? "OK" : "ERR");
 
-    display.drawLine(0, 43, 128, 43, SSD1306_WHITE);
+    display.drawLine(0, 47, 128, 47, SSD1306_WHITE);
 
     // 5. Dòng 5 & 6: Khí Gas/CO2 và Trạng thái cảnh báo tổng thể
-    display.setCursor(0, 46);
+    display.setCursor(0, 50);
     display.print("GAS/CO2: ");
     display.print(mq_raw_val);
     display.print(" ADC");
 
-    display.setCursor(0, 56);
+    display.setCursor(0, 57);
     if (env_alert) {
         display.print("! GAS/ENV ALERT !");
     } else if (link_lost) {
