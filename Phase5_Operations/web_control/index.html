@@ -15,8 +15,647 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        /* Reset & Base */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:         #080c10;
+            --bg-2:       #0d1117;
+            --bg-3:       #111820;
+            --surface:    #131b24;
+            --surface-2:  #1a2535;
+            --border:     #1e2d3d;
+            --border-2:   #243040;
+            --text-1:     #e2e8f0;
+            --text-2:     #94a3b8;
+            --text-3:     #4a6278;
+            --blue:       #38bdf8;
+            --blue-dim:   #0c4a6e;
+            --green:      #22d3a4;
+            --green-dim:  #064e3b;
+            --red:        #f87171;
+            --red-dim:    #7f1d1d;
+            --amber:      #fbbf24;
+            --amber-dim:  #78350f;
+            --purple:     #a78bfa;
+            --cyan:       #22d3ee;
+            --radius:     8px;
+            --radius-lg:  12px;
+            --glow-blue:  0 0 12px rgba(56,189,248,.25);
+            --glow-green: 0 0 12px rgba(34,211,164,.25);
+            --glow-red:   0 0 12px rgba(248,113,113,.25);
+        }
+
+        html, body {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 13px;
+            background: var(--bg);
+            color: var(--text-1);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* ============ LAYOUT ============ */
+        .gcs {
+            display: grid;
+            grid-template-rows: 52px 1fr;
+            grid-template-columns: 220px 1fr 200px;
+            height: 100vh;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        /* ============ TOPBAR ============ */
+        .topbar {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .topbar-brand .drone-icon {
+            width: 28px; height: 28px;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+            box-shadow: var(--glow-blue);
+        }
+
+        .brand-title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--text-1);
+            text-transform: uppercase;
+        }
+        .brand-sub {
+            font-size: 10px;
+            color: var(--text-3);
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.04em;
+        }
+
+        /* HUD Status Row (center of topbar) */
+        .hud-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .hud-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: var(--bg-3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-2);
+            letter-spacing: 0.06em;
+        }
+        .hud-chip .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--text-3);
+        }
+        .hud-chip.mode-guided .dot  { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+        .hud-chip.mode-auto .dot    { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+        .hud-chip.mode-loiter .dot  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .hud-chip.mode-rtl .dot     { background: var(--red); box-shadow: 0 0 6px var(--red); }
+        .hud-chip.armed {
+            border-color: #7f1d1d;
+            background: rgba(127,29,29,.3);
+            color: var(--red);
+            animation: armed-pulse 1.5s infinite;
+        }
+        @keyframes armed-pulse {
+            0%, 100% { box-shadow: 0 0 0 rgba(248,113,113,0); }
+            50%       { box-shadow: 0 0 8px rgba(248,113,113,.5); }
+        }
+
+        .topbar-right {
+            display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+        }
+
+        /* ============ SIDEBAR LEFT ============ */
+        .sidebar-left {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sidebar-left::-webkit-scrollbar { width: 4px; }
+        .sidebar-left::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-left::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+        /* ============ MAIN CONTENT ============ */
+        .main-content {
+            display: grid;
+            grid-template-rows: 1fr auto auto;
+            overflow: hidden;
+            background: var(--bg-2);
+            gap: 1px;
+        }
+
+        /* Map fills the top area */
+        .map-area {
+            position: relative;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 300px;
+        }
+        .map-overlay-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 6px;
+            z-index: 500;
+        }
+        .map-overlay-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+        }
+        .env-badge {
+            background: rgba(8,12,16,.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-2);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-2);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .env-badge .env-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+        .env-badge.warn .env-dot { background: var(--amber); }
+        .env-badge.danger .env-dot { background: var(--red); animation: armed-pulse 1s infinite; }
+
+        /* Charts row */
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--border);
+            height: 130px;
+        }
+        .chart-panel {
+            background: var(--surface);
+            padding: 8px 10px 6px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .chart-panel-title {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .chart-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .chart-latest {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-1);
+        }
+        .chart-body {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+        .chart-body canvas { width: 100% !important; height: 100% !important; }
+        .chart-no-data {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: var(--text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Log bar */
+        .log-bar {
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            padding: 4px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 36px;
+        }
+        .log-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            flex-shrink: 0;
+        }
+        #log_console {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--green);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10.5px;
+            outline: none;
+            resize: none;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        /* ============ SIDEBAR RIGHT ============ */
+        .sidebar-right {
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .sidebar-right::-webkit-scrollbar { width: 4px; }
+        .sidebar-right::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-right::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+        /* ============ PANEL / SECTION ============ */
+        .panel {
+            background: var(--bg-3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,.02);
+        }
+        .panel-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .panel-title .picon { font-size: 12px; }
+        .panel-body { padding: 10px; }
+
+        /* ============ TELEMETRY METRICS ============ */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .metric {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+        .metric-label {
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 3px;
+        }
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-1);
+            line-height: 1;
+        }
+        .metric-value.val-temp  { color: #fb923c; }
+        .metric-value.val-hum   { color: var(--blue); }
+        .metric-value.val-co2   { color: var(--amber); }
+        .metric-value.val-rssi  { color: var(--purple); }
+        .metric-value.val-green { color: var(--green); }
+        .metric-value.val-red   { color: var(--red); }
+        .metric-unit {
+            font-size: 10px;
+            font-weight: 400;
+            color: var(--text-3);
+            margin-left: 2px;
+        }
+        .metric-full { grid-column: span 2; }
+
+        /* Alert metric */
+        .metric.alert-bg { background: rgba(127,29,29,.25); border-color: #7f1d1d; }
+        .metric.safe-bg  { background: rgba(6,78,59,.2);  border-color: #064e3b; }
+
+        /* ============ 3D MODEL ============ */
+        #drone3d_container {
+            width: 100%;
+            height: 160px;
+            background: #04090e;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .att-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            margin-top: 6px;
+        }
+        .att-cell {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 6px;
+            text-align: center;
+        }
+        .att-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            display: block;
+            line-height: 1.2;
+        }
+        .att-lab {
+            font-size: 9px;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ============ GPS ============ */
+        .gps-item {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 10px;
+            margin-bottom: 5px;
+        }
+        .gps-item:last-child { margin-bottom: 0; }
+        .gps-label {
+            font-size: 9px; color: var(--text-3);
+            text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .gps-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; font-weight: 700;
+            color: var(--green);
+        }
+
+        /* ============ BUTTONS ============ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 6px 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all .15s;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+        .btn:active { transform: scale(.97); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+        .btn-primary  { background: var(--blue-dim); color: var(--blue); border-color: #1e4a6a; }
+        .btn-primary:hover:not(:disabled)  { background: #164e75; border-color: var(--blue); box-shadow: var(--glow-blue); }
+
+        .btn-danger   { background: var(--red-dim); color: var(--red); border-color: #7f1d1d; }
+        .btn-danger:hover:not(:disabled)   { background: #991b1b; box-shadow: var(--glow-red); }
+
+        .btn-success  { background: var(--green-dim); color: var(--green); border-color: #065f46; }
+        .btn-success:hover:not(:disabled)  { background: #047857; box-shadow: var(--glow-green); }
+
+        .btn-warning  { background: var(--amber-dim); color: var(--amber); border-color: #92400e; }
+        .btn-warning:hover:not(:disabled)  { background: #b45309; }
+
+        .btn-secondary { background: var(--bg-3); color: var(--text-2); border-color: var(--border-2); }
+        .btn-secondary:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
+
+        .btn-ghost { background: transparent; color: var(--text-3); border-color: transparent; font-size: 10px; padding: 4px 8px; }
+        .btn-ghost:hover { color: var(--text-1); }
+
+        .btn-connect-on  { background: var(--blue-dim); color: var(--blue); border-color: #1e4a6a; }
+        .btn-connect-off { background: var(--red-dim); color: var(--red); border-color: #7f1d1d; }
+
+        .btn-full { width: 100%; }
+
+        .btn-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .btn-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+        .btn-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; }
+
+        .sec-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-3);
+            margin: 8px 0 5px;
+        }
+
+        /* ============ FLIGHT BTN special ============ */
+        .btn-arm {
+            background: linear-gradient(135deg,#7f1d1d,#991b1b);
+            color: #fca5a5;
+            border-color: #b91c1c;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .btn-arm:hover:not(:disabled) { background: linear-gradient(135deg,#991b1b,#b91c1c); box-shadow: 0 0 16px rgba(248,113,113,.4); }
+
+        .btn-takeoff {
+            background: linear-gradient(135deg,#064e3b,#065f46);
+            color: var(--green);
+            border-color: #047857;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .btn-takeoff:hover:not(:disabled) { box-shadow: var(--glow-green); }
+
+        /* ============ MOTOR BARS ============ */
+        .motor-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-bottom: 6px;
+        }
+        .motor-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+        .motor-bar-wrap {
+            width: 100%;
+            background: var(--border);
+            border-radius: 3px;
+            height: 50px;
+            display: flex;
+            align-items: flex-end;
+            overflow: hidden;
+        }
+        .motor-bar {
+            width: 100%;
+            background: linear-gradient(to top, var(--blue), #7dd3fc);
+            border-radius: 3px 3px 0 0;
+            transition: height 0.15s ease;
+            height: 0%;
+        }
+        .motor-label { font-size: 9px; color: var(--text-3); font-weight: 700; }
+        .motor-pwm   { font-size: 9px; color: var(--text-2); font-family: 'JetBrains Mono', monospace; }
+
+        /* ============ SLIDER ============ */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 3px;
+            border-radius: 2px;
+            background: var(--border-2);
+            outline: none;
+            margin: 8px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--blue);
+            cursor: pointer;
+            border: 2px solid var(--bg);
+            box-shadow: 0 0 0 1px var(--blue);
+        }
+        input[type="range"]:disabled { opacity: 0.35; }
+
+        /* ============ FIELD INPUT ============ */
+        .field { display: flex; flex-direction: column; gap: 3px; }
+        .field label { font-size: 9px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+        .field input {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid var(--border-2);
+            border-radius: 6px;
+            background: var(--bg-3);
+            color: var(--text-1);
+            outline: none;
+            transition: border-color .1s;
+        }
+        .field input:focus { border-color: var(--blue); }
+
+        /* ============ STATUS BADGE ============ */
+        .status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid; }
+        .status.ok  { background: rgba(34,211,164,.1); color: var(--green); border-color: #065f46; }
+        .status.err { background: rgba(248,113,113,.1); color: var(--red);   border-color: #7f1d1d; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .status.ok .status-dot { animation: pulse-dot 2s ease-in-out infinite; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+        /* ============ WIND DISPLAY ============ */
+        .wind-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 22px; font-weight: 700;
+            color: var(--cyan);
+            display: block; text-align: center;
+        }
+        .servo-display { text-align: center; margin-bottom: 8px; }
+        .servo-angle {
+            font-size: 24px; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--purple); display: block;
+        }
+        .servo-label { font-size: 10px; color: var(--text-3); }
+
+        /* ============ FOOTER ============ */
+        .footer {
+            grid-column: 1/-1;
+            display: none; /* hidden, we use log-bar instead */
+        }
+
+        /* scrollbar global */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+        /* tag */
+        .tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .tag-blue  { background: rgba(56,189,248,.15); color: var(--blue); }
+        .tag-gray  { background: var(--bg-3); color: var(--text-3); }
+        .tag-green { background: rgba(34,211,164,.15); color: var(--green); }
+        .tag-red   { background: rgba(248,113,113,.15); color: var(--red); }
+
+        /* alert banner */
+        .alert-banner { display:none; }
+        .alert-banner.show { display:flex; }
+
+        /* compat: hidden old classes */
+        .page { display: none; }
+        .telem-value.ok          { color: var(--green); }
+        .telem-value.alert-active{ color: var(--red); }
+
+        /* ============ RESPONSIVE ============ */
+        @media (max-width: 1024px) {
+            .gcs { grid-template-columns: 200px 1fr 180px; }
+        }
+        @media (max-width: 768px) {
+            .gcs { grid-template-columns: 1fr; grid-template-rows: 52px auto; }
+            .sidebar-left, .sidebar-right { display: none; }
+            .charts-row { grid-template-columns: repeat(2,1fr); height: auto; }
+        }
+    </style>
 
         :root {
             --bg:        #f0f2f5;
@@ -625,501 +1264,354 @@
     </style>
 </head>
 <body>
-<div class="page">
+<!-- Hidden compat div for old JS selectors -->
+<div class="page" style="display:none"></div>
 
-    <!-- Topbar -->
-    <div class="topbar">
-        <div class="topbar-left">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-            </svg>
+<div class="gcs">
+
+    <!-- ======================== TOPBAR ======================== -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="drone-icon">🚁</div>
             <div>
-                <h1>Drone IoT — Control Panel</h1>
-                <div class="topbar-subtitle">BW16 RTL8720DN + ArduPilot SITL</div>
+                <div class="brand-title">DroneIoT GCS</div>
+                <div class="brand-sub">BW16 + ArduPilot SITL</div>
             </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-            <!-- Flight Mode Badge -->
-            <div id="flight_mode_badge" style="
-                display:flex; align-items:center; gap:5px;
-                background:#1f2937; color:#9ca3af;
-                font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700;
-                padding:4px 10px; border-radius:4px; letter-spacing:.04em;
-            ">
-                <span style="color:#4b5563">■</span>
-                <span id="flight_mode_text">--</span>
+
+        <!-- HUD Center -->
+        <div class="hud-row">
+            <div id="flight_mode_badge" class="hud-chip">
+                <div class="dot"></div>
+                <span id="flight_mode_text">STANDBY</span>
             </div>
-            <!-- Armed/Disarmed Badge -->
-            <div id="armed_badge" style="
-                background:#1f2937; color:#4b5563;
-                font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
-                padding:4px 10px; border-radius:4px; letter-spacing:.06em;
-                text-transform:uppercase;
-            " id="armed_badge">DISARMED</div>
-            <!-- CMD Status -->
-            <div id="cmd_status_badge" style="
-                max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-                font-size:10px; color:var(--text-3);
-            "></div>
-            <!-- MQTT Status -->
+            <div id="armed_badge" class="hud-chip">
+                DISARMED
+            </div>
+            <div id="cmd_status_badge" class="hud-chip" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;"></div>
+        </div>
+
+        <div class="topbar-right">
             <div id="status_badge" class="status err">
                 <span class="status-dot"></span>
-                <span id="status_text">Chưa kết nối</span>
+                <span id="status_text">Offline</span>
             </div>
-            <button id="btn_connect" class="btn btn-connect-on" onclick="toggleConnection()">Kết nối</button>
+            <button id="btn_connect" class="btn btn-connect-on" onclick="toggleConnection()">Connect</button>
         </div>
-    </div>
+    </header>
 
-    <!-- Main Grid: Telemetry + Flight -->
-    <div class="grid-main">
+    <!-- ======================== SIDEBAR LEFT ======================== -->
+    <aside class="sidebar-left">
 
-        <!-- Telemetry -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
-                    </svg>
-                    Dữ liệu cảm biến
-                </span>
-                <span class="tag tag-blue">Real-time</span>
+        <!-- Sensor Metrics -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">🌡️</span> Payload Sensors</div>
+                <span class="tag tag-blue">BW16</span>
             </div>
-            <div class="card-body">
-                <table class="telem-table">
-                    <tr>
-                        <td class="telem-label">Nhiệt độ</td>
-                        <td class="telem-value"><span id="temp_value">--</span><span class="telem-unit">°C</span></td>
-                    </tr>
-                    <tr>
-                        <td class="telem-label">Độ ẩm</td>
-                        <td class="telem-value"><span id="hum_value">--</span><span class="telem-unit">%</span></td>
-                    </tr>
-                    <tr>
-                        <td class="telem-label">CO2 (ADC thô)</td>
-                        <td class="telem-value"><span id="co2_value">--</span><span class="telem-unit">ADC</span></td>
-                    </tr>
-
-                    <tr>
-                        <td class="telem-label">RSSI BW16</td>
-                        <td class="telem-value"><span id="rssi_value">--</span><span class="telem-unit">dBm</span></td>
-                    </tr>
-                    <tr>
-                        <td class="telem-label">Trạng thái khí</td>
-                        <td class="telem-value"><span id="alert_value" class="ok">AN TOÀN</span></td>
-                    </tr>
-                </table>
-
+            <div class="panel-body">
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-label">Temperature</div>
+                        <div class="metric-value val-temp"><span id="temp_value">--</span><span class="metric-unit">°C</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Humidity</div>
+                        <div class="metric-value val-hum"><span id="hum_value">--</span><span class="metric-unit">%</span></div>
+                    </div>
+                    <div class="metric metric-full" id="co2_metric">
+                        <div class="metric-label">CO₂ / Gas (ADC)</div>
+                        <div class="metric-value val-co2"><span id="co2_value">--</span><span class="metric-unit">ADC</span></div>
+                    </div>
+                    <div class="metric" id="alert_metric" style="grid-column:span 2">
+                        <div class="metric-label">Air Quality</div>
+                        <div class="metric-value" style="font-size:13px;"><span id="alert_value" class="ok">✅ SAFE</span></div>
+                    </div>
+                    <div class="metric metric-full">
+                        <div class="metric-label">RSSI BW16</div>
+                        <div class="metric-value val-rssi"><span id="rssi_value">--</span><span class="metric-unit">dBm</span></div>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- 3D Attitude -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">🎮</span> Attitude 3D</div>
+                <span id="eng_st" class="tag tag-gray">STANDBY</span>
+            </div>
+            <div class="panel-body" style="padding:8px;">
+                <div id="drone3d_container"></div>
+                <div class="att-row">
+                    <div class="att-cell">
+                        <span class="att-val" id="att_r" style="color:var(--blue)">0.0°</span>
+                        <span class="att-lab">Roll</span>
+                    </div>
+                    <div class="att-cell">
+                        <span class="att-val" id="att_p" style="color:var(--purple)">0.0°</span>
+                        <span class="att-lab">Pitch</span>
+                    </div>
+                    <div class="att-cell">
+                        <span class="att-val" id="att_y" style="color:var(--cyan)">0.0°</span>
+                        <span class="att-lab">Yaw</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GPS -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">📡</span> GPS Position</div>
+                <span class="tag tag-green">LIVE</span>
+            </div>
+            <div class="panel-body">
+                <div class="gps-item">
+                    <div class="gps-label">Latitude</div>
+                    <div class="gps-val" id="chart_gps_lat_latest">--</div>
+                </div>
+                <div class="gps-item">
+                    <div class="gps-label">Longitude</div>
+                    <div class="gps-val" id="chart_gps_lon_latest">--</div>
+                </div>
+                <div class="gps-item">
+                    <div class="gps-label">Altitude</div>
+                    <div class="gps-val" style="color:var(--blue)" id="chart_gps_alt_latest">-- m</div>
+                </div>
+                <div class="gps-item">
+                    <div class="gps-label">Waypoints queued</div>
+                    <div class="gps-val" style="color:var(--amber)" id="wp_count_display">0 pts</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motor Bars -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">⚡</span> Motors PWM</div>
+                <span class="tag tag-blue">LIVE</span>
+            </div>
+            <div class="panel-body">
+                <div class="motor-mini-grid">
+                    <div class="motor-col"><div class="motor-bar-wrap"><div id="bar_m1" class="motor-bar"></div></div><span class="motor-label">M1</span><span class="motor-pwm" id="lbl_m1">1000</span></div>
+                    <div class="motor-col"><div class="motor-bar-wrap"><div id="bar_m2" class="motor-bar"></div></div><span class="motor-label">M2</span><span class="motor-pwm" id="lbl_m2">1000</span></div>
+                    <div class="motor-col"><div class="motor-bar-wrap"><div id="bar_m3" class="motor-bar"></div></div><span class="motor-label">M3</span><span class="motor-pwm" id="lbl_m3">1000</span></div>
+                    <div class="motor-col"><div class="motor-bar-wrap"><div id="bar_m4" class="motor-bar"></div></div><span class="motor-label">M4</span><span class="motor-pwm" id="lbl_m4">1000</span></div>
+                </div>
+                <p style="font-size:9px;color:var(--text-3);text-align:center;margin:0;">1000=Stop &nbsp;|&nbsp; 2000=Full</p>
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- ======================== MAIN CONTENT ======================== -->
+    <main class="main-content">
+
+        <!-- MAP -->
+        <div class="map-area">
+            <div id="map"></div>
+
+            <!-- Map overlay buttons -->
+            <div class="map-overlay-controls">
+                <button class="btn btn-secondary" style="backdrop-filter:blur(8px);background:rgba(13,17,23,.8);" onclick="clearMap()">🗑 Clear</button>
+                <button class="btn btn-primary" style="backdrop-filter:blur(8px);" onclick="uploadMission()">📤 Upload Mission</button>
+            </div>
+
+            <!-- Map overlay env badges -->
+            <div class="map-overlay-info" id="map_env_overlay">
+                <div class="env-badge" id="env_temp_badge"><div class="env-dot"></div><span>Temp: --°C</span></div>
+                <div class="env-badge" id="env_co2_badge"><div class="env-dot"></div><span>CO₂: -- ADC</span></div>
+            </div>
+        </div>
+
+        <!-- CHARTS ROW -->
+        <div class="charts-row">
+            <div class="chart-panel">
+                <div class="chart-panel-header">
+                    <div class="chart-panel-title"><span class="chart-dot" style="background:#fb923c"></span>Temperature</div>
+                    <span class="chart-latest" id="chart_temp_latest" style="color:#fb923c">--</span>
+                </div>
+                <div class="chart-body"><canvas id="chart_temp"></canvas><div class="chart-no-data" id="no_data_temp">Waiting...</div></div>
+            </div>
+            <div class="chart-panel">
+                <div class="chart-panel-header">
+                    <div class="chart-panel-title"><span class="chart-dot" style="background:var(--blue)"></span>Humidity</div>
+                    <span class="chart-latest" id="chart_hum_latest" style="color:var(--blue)">--</span>
+                </div>
+                <div class="chart-body"><canvas id="chart_hum"></canvas><div class="chart-no-data" id="no_data_hum">Waiting...</div></div>
+            </div>
+            <div class="chart-panel">
+                <div class="chart-panel-header">
+                    <div class="chart-panel-title"><span class="chart-dot" style="background:var(--amber)"></span>CO₂ ADC</div>
+                    <span class="chart-latest" id="chart_co2_latest" style="color:var(--amber)">--</span>
+                </div>
+                <div class="chart-body"><canvas id="chart_co2"></canvas><div class="chart-no-data" id="no_data_co2">Waiting...</div></div>
+            </div>
+            <div class="chart-panel">
+                <div class="chart-panel-header">
+                    <div class="chart-panel-title"><span class="chart-dot" style="background:var(--purple)"></span>RSSI BW16</div>
+                    <span class="chart-latest" id="chart_rssi_latest" style="color:var(--purple)">--</span>
+                </div>
+                <div class="chart-body"><canvas id="chart_rssi"></canvas><div class="chart-no-data" id="no_data_rssi">Waiting...</div></div>
+            </div>
+        </div>
+
+        <!-- LOG BAR -->
+        <div class="log-bar">
+            <span class="log-label">SYS LOG</span>
+            <textarea id="log_console" readonly rows="1"></textarea>
+            <button class="btn btn-ghost" onclick="clearLogs()">CLR</button>
+        </div>
+
+    </main>
+
+    <!-- ======================== SIDEBAR RIGHT ======================== -->
+    <aside class="sidebar-right">
 
         <!-- Flight Control -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                    </svg>
-                    Điều khiển bay
-                </span>
-                <span class="tag tag-gray">MAVLink SITL</span>
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">✈️</span> Flight Control</div>
+                <span class="tag tag-blue">MAVLink</span>
             </div>
-            <div class="card-body">
-                <div class="btn-group">
-                    <div class="btn-row">
-                        <button id="btn_arm" class="btn btn-primary" onclick="sendFlightCommand('ARM')">ARM</button>
-                        <button id="btn_disarm" class="btn btn-secondary" onclick="sendFlightCommand('DISARM')">DISARM</button>
-                    </div>
-                    <div class="btn-row">
-                        <button id="btn_takeoff" class="btn btn-success" onclick="sendFlightCommand('TAKEOFF')">↑ TAKEOFF 10m</button>
-                        <button id="btn_land" class="btn btn-danger" onclick="sendFlightCommand('LAND')">↓ LAND</button>
-                    </div>
-                    <div class="btn-row">
-                        <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">⟲ RTL</button>
-                        <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">Reset GUIDED</button>
-                    </div>
-                    <div style="margin-top: 8px;"></div>
-                    <div class="section-label">Chế độ tự cân bằng (Stabilization)</div>
-                    <div class="btn-row">
-                        <button id="btn_mode_loiter" class="btn btn-primary" onclick="sendFlightCommand('LOITER')" style="font-size:11px;">🚁 LOITER (Giữ Vị Trí)</button>
-                        <button id="btn_mode_althold" class="btn btn-secondary" onclick="sendFlightCommand('ALT_HOLD')" style="font-size:11px;">🎈 ALT_HOLD (Giữ Cao)</button>
-                        <button id="btn_mode_stabilize" class="btn btn-secondary" onclick="sendFlightCommand('STABILIZE')" style="font-size:11px;">⚖️ STABILIZE (Cân Bằng)</button>
-                    </div>
-                    <!-- [NEW] Waypoint Mission -->
-                    <div style="margin-top: 8px;"></div>
-                    <div class="section-label">Bay tự động (Waypoint Mission)</div>
-                    <div class="btn-row">
-                        <button class="btn btn-primary" onclick="sendMissionCommand('START')">🗓️ START MISSION</button>
-                        <button class="btn btn-secondary" onclick="sendMissionCommand('PAUSE')">⏸️ PAUSE</button>
-                    </div>
-
-                    <div style="margin-top: 8px;"></div>
-                    <div class="section-label" style="color: #dc2626;">🚨 Khẩn cấp</div>
-                    <button class="btn btn-danger btn-full" onclick="sendFlightCommand('RECOVERY')" style="font-weight:700;">🔄 PHỤC HỒI SAU FAILSAFE</button>
+            <div class="panel-body">
+                <div class="btn-grid-2" style="margin-bottom:5px;">
+                    <button id="btn_arm" class="btn btn-arm" onclick="sendFlightCommand('ARM')">⚡ ARM</button>
+                    <button id="btn_disarm" class="btn btn-danger" onclick="sendFlightCommand('DISARM')">🔒 DISARM</button>
+                </div>
+                <div class="btn-grid-2" style="margin-bottom:5px;">
+                    <button id="btn_takeoff" class="btn btn-takeoff" onclick="sendFlightCommand('TAKEOFF')">▲ TAKEOFF</button>
+                    <button id="btn_land" class="btn btn-danger" onclick="sendFlightCommand('LAND')">▼ LAND</button>
+                </div>
+                <div class="btn-grid-2">
+                    <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">⟲ RTL</button>
+                    <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">↺ GUIDED</button>
                 </div>
 
-                <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
-                    <div class="section-label">Payload &amp; Cảnh báo</div>
-                    <div class="btn-group">
-                        <div class="btn-row">
-                            <button class="btn btn-danger" onclick="sendPayloadCommand('BUZZER_ON')">🔔 Bật còi</button>
-                            <button class="btn btn-secondary" onclick="sendPayloadCommand('BUZZER_OFF')">Tắt còi</button>
-                        </div>
-                        <div class="btn-row">
-                            <button class="btn btn-warning" onclick="sendPayloadCommand('LED_ON')">💡 Bật LED</button>
-                            <button class="btn btn-secondary" onclick="sendPayloadCommand('LED_OFF')">Tắt LED</button>
-                        </div>
-                        <button class="btn btn-secondary btn-full" onclick="sendPayloadCommand('RESET')">Khôi phục tự động onboard</button>
-                    </div>
+                <div class="sec-label">Stabilization Mode</div>
+                <div class="btn-grid-3">
+                    <button class="btn btn-primary" onclick="sendFlightCommand('LOITER')" style="font-size:10px;">LOITER</button>
+                    <button class="btn btn-secondary" onclick="sendFlightCommand('ALT_HOLD')" style="font-size:10px;">ALTHOLD</button>
+                    <button class="btn btn-secondary" onclick="sendFlightCommand('STABILIZE')" style="font-size:10px;">STAB</button>
                 </div>
-            </div>
-        </div>        <!-- Survival Testing Suite -->
-        <div class="card" style="grid-column: span 3;">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                    </svg>
-                    🛠️ Khảo nghiệm Sinh Tồn SITL
-                </span>
-                <span class="tag tag-gray">SIM_* PARAMS</span>
-            </div>
-            <div class="card-body">
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
 
-                    <!-- Col 1: Wind / Turbulence -->
-                    <div>
-                        <div class="section-label">💨 Gió mô phỏng (SIM_WIND_SPD)</div>
-                        <div class="wind-display">
-                            <span class="wind-val" id="wind_val_display">0 m/s</span>
-                            <span class="servo-label">Tốc độ gió</span>
-                        </div>
-                        <input type="range" id="wind_slider" min="0" max="25" step="1" value="0"
-                               oninput="sendWindSpeed(this.value)">
-                        <div class="wind-scale">
-                            <span>0 (Lặng)</span>
-                            <span>13 (Cấp 6)</span>
-                            <span>25 (Bão)</span>
-                        </div>
-                        <div class="btn-row" style="margin-top:10px;">
-                            <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">🌤 Lặng</button>
-                            <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">🌪 Cấp 7</button>
-                        </div>
-
-                        <div class="section-label" style="margin-top:14px;">Nhiễu loạn (SIM_WIND_TURB)</div>
-                        <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
-                               oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3);">
-                            <span>Level: <span id="turb_val">0</span></span>
-                            <span>Max: 10</span>
-                        </div>
-                    </div>
-
-                    <!-- Col 2: Motor Failure -->
-                    <div>
-                        <div class="section-label">🔧 Chết động cơ (Motor Failure)</div>
-                        <div class="btn-row">
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
-                            <button class="btn btn-danger" style="flex:1;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
-                        </div>
-                        <div class="btn-row" style="margin-top:6px;">
-                            <button class="btn btn-success btn-full" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">✅ Khôi phục tất cả động cơ</button>
-                        </div>
-
-                        <div class="section-label" style="margin-top:14px;">📶 Nhiễu GPS (GPS Glitch)</div>
-                        <div class="btn-row">
-                            <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">❌ Tắt GPS</button>
-                            <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">✅ Bật GPS</button>
-                        </div>
-                    </div>
-
-                    <!-- Col 3: Geofence -->
-                    <div>
-                        <div class="section-label">🛡️ Hàng rào điện tử (Geofence)</div>
-                        <div style="font-size:11px; color:var(--text-3); margin-bottom:10px; line-height:1.5;">
-                            Khi bật: Nếu drone bay quá <strong>50m</strong> khỏi điểm xuất phát,
-                            hệ thống tự động kích hoạt <strong>RTL</strong> để quảy về.
-                        </div>
-                        <div id="geo_status" style="font-size:11px; font-weight:600; color:var(--text-3); margin-bottom:8px;">⚪ Trạng thái: Tắt</div>
-                        <div class="btn-row">
-                            <button class="btn btn-warning btn-full" onclick="enableGeofence()">🛡️ Bật Geofence Failsafe</button>
-                        </div>
-                        <div class="btn-row" style="margin-top:6px;">
-                            <button class="btn btn-secondary btn-full" onclick="disableGeofence()">Tắt Geofence</button>
-                        </div>
-
-                        <div class="section-label" style="margin-top:14px;">Reset toàn bộ</div>
-                        <button class="btn btn-secondary btn-full" onclick="resetAllSim()">🔄 Reset SITL về mặc định</button>
-                    </div>
-
+                <div class="sec-label">Auto Mission</div>
+                <div class="btn-grid-2">
+                    <button class="btn btn-primary" onclick="sendMissionCommand('START')">▶ START</button>
+                    <button class="btn btn-secondary" onclick="sendMissionCommand('PAUSE')">⏸ PAUSE</button>
                 </div>
+
+                <div class="sec-label" style="color:var(--red);">⚠ Emergency</div>
+                <button class="btn btn-danger btn-full" onclick="sendFlightCommand('RECOVERY')" style="font-weight:700;">🔄 FAILSAFE RECOVERY</button>
             </div>
         </div>
 
-        <!-- Servo -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-                    </svg>
-                    Servo thả hàng
-                </span>
-                <span class="tag tag-gray">PA13</span>
+        <!-- Payload -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">📦</span> Payload</div>
+                <span class="tag tag-gray">BW16</span>
             </div>
-            <div class="card-body">
+            <div class="panel-body">
+                <div class="btn-grid-2" style="margin-bottom:5px;">
+                    <button class="btn btn-danger" onclick="sendPayloadCommand('BUZZER_ON')">🔔 Buzzer</button>
+                    <button class="btn btn-secondary" onclick="sendPayloadCommand('BUZZER_OFF')">🔕 Off</button>
+                </div>
+                <div class="btn-grid-2" style="margin-bottom:5px;">
+                    <button class="btn btn-warning" onclick="sendPayloadCommand('LED_ON')">💡 LED</button>
+                    <button class="btn btn-secondary" onclick="sendPayloadCommand('LED_OFF')">Off</button>
+                </div>
+                <div class="sec-label">Sampling Mechanism</div>
                 <div class="servo-display">
                     <span class="servo-angle"><span id="servo_angle_display">0</span>°</span>
-                    <span class="servo-label">Góc hiện tại</span>
+                    <span class="servo-label">Servo Position</span>
                 </div>
                 <input type="range" id="servo_slider" min="0" max="180" value="0"
                        oninput="updateServoDisplay(this.value)"
                        onchange="sendServoCommand(this.value)">
-                <div class="btn-row">
-                    <button class="btn btn-primary" onclick="sendServoCommand(90)">Mở — 90°</button>
-                    <button class="btn btn-secondary" onclick="sendServoCommand(0)">Đóng — 0°</button>
+                <div class="btn-grid-2">
+                    <button class="btn btn-success" onclick="sendServoCommand(90)">Open 90°</button>
+                    <button class="btn btn-secondary" onclick="sendServoCommand(0)">Close 0°</button>
+                </div>
+                <div style="margin-top:6px;">
+                    <button class="btn btn-secondary btn-full" onclick="sendPayloadCommand('RESET')">↺ Reset Onboard</button>
                 </div>
             </div>
         </div>
 
-        
-        <!-- 3D Telemetry & GPS View -->
-        <div class="card" style="grid-column: span 3;">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                        <path d="M2 12h20"/>
-                    </svg>
-                    Mô hình 3D &amp; Tọa độ GPS
-                </span>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <span id="eng_st" style="font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:.05em;">STANDBY</span>
-                    <span class="tag tag-blue">SITL LIVE</span>
-                </div>
+        <!-- Survival Testing -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">🛠</span> SITL Sim</div>
+                <span class="tag tag-gray">SIM_*</span>
             </div>
-            <div class="card-body">
-                <div style="display:grid; grid-template-columns:1fr 1.8fr 1fr; gap:20px; align-items:start;">
-
-                    <!-- LEFT: 3D Drone Model -->
-                    <div>
-                        <div class="section-label">Mô hình 3D Drone</div>
-                        <div id="drone3d_container"></div>
-                        <div class="att-grid" style="margin-top:10px;">
-                            <div>
-                                <span class="att-val" id="att_r" style="color:#3b82f6;">0.0°</span>
-                                <span class="att-lab">Roll</span>
-                            </div>
-                            <div>
-                                <span class="att-val" id="att_p" style="color:#8b5cf6;">0.0°</span>
-                                <span class="att-lab">Pitch</span>
-                            </div>
-                            <div>
-                                <span class="att-val" id="att_y" style="color:#06b6d4;">0.0°</span>
-                                <span class="att-lab">Yaw</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- CENTER: Live Map -->
-                    <div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <div class="section-label" style="margin:0;">Bản đồ hành trình (Live Trajectory)</div>
-                            <div style="display:flex; gap:6px;">
-                                <button class="btn btn-secondary" style="font-size:10px; padding:3px 8px;" onclick="clearMap()">🗑️ Xóa</button>
-                                <button class="btn btn-primary" style="font-size:10px; padding:3px 8px;" onclick="uploadMission()">📤 Upload</button>
-                            </div>
-                        </div>
-                        <div id="map"></div>
-                        <div style="font-size:10px; color:var(--text-3); margin-top:5px;">
-                            👆 Click lên bản đồ để đặt Waypoint. Đường đỏ = quỹ đạo thực. Đường xanh = mission.
-                        </div>
-                    </div>
-
-                    <!-- RIGHT: GPS Data -->
-                    <div>
-                        <div class="section-label">Tọa độ định vị (GPS)</div>
-                        <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
-                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
-                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Vĩ độ (Lat)</div>
-                                <div id="chart_gps_lat_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#10b981; margin-top:2px;">--</div>
-                            </div>
-                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
-                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Kinh độ (Lon)</div>
-                                <div id="chart_gps_lon_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#10b981; margin-top:2px;">--</div>
-                            </div>
-                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
-                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Độ cao (Alt)</div>
-                                <div id="chart_gps_alt_latest" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#3b82f6; margin-top:2px;">-- m</div>
-                            </div>
-                            <div style="background:var(--bg); border-radius:6px; padding:10px;">
-                                <div style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em;">Waypoints đang chờ</div>
-                                <div id="wp_count_display" style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:#f59e0b; margin-top:2px;">0 điểm</div>
-                            </div>
-                        </div>
-                    </div>
-
+            <div class="panel-body">
+                <div class="sec-label">💨 Wind Speed</div>
+                <div style="text-align:center;">
+                    <span class="wind-val" id="wind_val_display">0 m/s</span>
                 </div>
+                <input type="range" id="wind_slider" min="0" max="25" step="1" value="0" oninput="sendWindSpeed(this.value)">
+                <div class="btn-grid-2">
+                    <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">🌤 Calm</button>
+                    <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">🌪 Storm</button>
+                </div>
+
+                <div class="sec-label" style="margin-top:10px;">Turbulence (SIM_WIND_TURB)</div>
+                <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
+                       oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
+                <div style="font-size:10px;color:var(--text-3);display:flex;justify-content:space-between;">
+                    <span>Level: <span id="turb_val">0</span></span><span>Max: 10</span>
+                </div>
+
+                <div class="sec-label" style="margin-top:10px;">🔧 Motor Failure</div>
+                <div class="btn-grid-4">
+                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
+                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
+                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
+                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
+                </div>
+                <button class="btn btn-success btn-full" style="margin-top:4px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">✅ Restore All Motors</button>
+
+                <div class="sec-label" style="margin-top:10px;">📶 GPS Glitch</div>
+                <div class="btn-grid-2">
+                    <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">❌ Kill GPS</button>
+                    <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">✅ GPS On</button>
+                </div>
+
+                <div class="sec-label" style="margin-top:10px;">🛡 Geofence</div>
+                <div id="geo_status" style="font-size:10px;font-weight:600;color:var(--text-3);margin-bottom:6px;">⚪ Off</div>
+                <div class="btn-grid-2">
+                    <button class="btn btn-warning btn-full" onclick="enableGeofence()">🛡 Enable</button>
+                    <button class="btn btn-secondary btn-full" onclick="disableGeofence()">Disable</button>
+                </div>
+
+                <div class="sec-label" style="margin-top:10px;">Reset</div>
+                <button class="btn btn-secondary btn-full" onclick="resetAllSim()">🔄 Reset All SITL</button>
             </div>
         </div>
-
-        <!-- [NEW] Motor Dynamics -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <circle cx="10" cy="10" r="3"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.22 3.22l2.12 2.12M14.66 14.66l2.12 2.12M3.22 16.78l2.12-2.12M14.66 5.34l2.12-2.12"/>
-                    </svg>
-                    Động lực học cánh quạt
-                </span>
-                <span class="tag tag-blue">PWM LIVE</span>
-            </div>
-            <div class="card-body">
-                <div class="motor-grid">
-                    <div class="motor-col">
-                        <div class="motor-bar-wrap"><div id="bar_m1" class="motor-bar"></div></div>
-                        <span class="motor-label">M1</span>
-                        <span class="motor-pwm" id="lbl_m1">1000</span>
-                    </div>
-                    <div class="motor-col">
-                        <div class="motor-bar-wrap"><div id="bar_m2" class="motor-bar"></div></div>
-                        <span class="motor-label">M2</span>
-                        <span class="motor-pwm" id="lbl_m2">1000</span>
-                    </div>
-                    <div class="motor-col">
-                        <div class="motor-bar-wrap"><div id="bar_m3" class="motor-bar"></div></div>
-                        <span class="motor-label">M3</span>
-                        <span class="motor-pwm" id="lbl_m3">1000</span>
-                    </div>
-                    <div class="motor-col">
-                        <div class="motor-bar-wrap"><div id="bar_m4" class="motor-bar"></div></div>
-                        <span class="motor-label">M4</span>
-                        <span class="motor-pwm" id="lbl_m4">1000</span>
-                    </div>
-                </div>
-                <p style="font-size:11px;color:var(--text-3);text-align:center;margin:0;">
-                    1000 = Dừng &nbsp;|&nbsp; 2000 = Full throttle
-                </p>
-            </div>
-        </div>
-
-        <!-- [NEW] Weather Control -->
 
         <!-- MQTT Config -->
-        <div class="card" style="grid-column: span 2;">
-            <div class="card-header">
-                <span class="card-title">
-                    <svg class="card-title-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"/>
-                    </svg>
-                    Kết nối MQTT
-                </span>
-                <span class="tag tag-gray">WebSocket</span>
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title"><span class="picon">🔗</span> MQTT Connection</div>
             </div>
-            <div class="card-body">
-                <div class="config-row">
-                    <div class="field">
-                        <label>Broker Host</label>
-                        <input type="text" id="mqtt_host" value="broker.emqx.io" placeholder="broker.emqx.io">
-                    </div>
-                    <div class="field">
-                        <label>WebSocket Port</label>
-                        <input type="number" id="mqtt_port" value="8083" placeholder="8083">
-                    </div>
-                    <button id="btn_connect_2" class="btn btn-connect-on" onclick="toggleConnection()">Kết nối</button>
+            <div class="panel-body">
+                <div class="field" style="margin-bottom:6px;">
+                    <label>Broker Host</label>
+                    <input type="text" id="mqtt_host" value="broker.emqx.io">
                 </div>
+                <div class="field" style="margin-bottom:8px;">
+                    <label>Port (WS)</label>
+                    <input type="number" id="mqtt_port" value="8083">
+                </div>
+                <button id="btn_connect_2" class="btn btn-connect-on btn-full" onclick="toggleConnection()">Connect</button>
             </div>
         </div>
 
-    </div>
+    </aside>
 
-    <!-- Charts -->
-    <div class="charts-grid">
-
-        <!-- Nhiệt độ -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <span class="chart-title">
-                    <span class="chart-dot" style="background:#2563eb"></span>
-                    Nhiệt độ
-                </span>
-                <span class="chart-latest" id="chart_temp_latest">--</span>
-            </div>
-            <div class="chart-body">
-                <canvas id="chart_temp"></canvas>
-                <div class="chart-no-data" id="no_data_temp">Chờ dữ liệu...</div>
-            </div>
-        </div>
-
-        <!-- Độ ẩm -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <span class="chart-title">
-                    <span class="chart-dot" style="background:#0891b2"></span>
-                    Độ ẩm
-                </span>
-                <span class="chart-latest" id="chart_hum_latest">--</span>
-            </div>
-            <div class="chart-body">
-                <canvas id="chart_hum"></canvas>
-                <div class="chart-no-data" id="no_data_hum">Chờ dữ liệu...</div>
-            </div>
-        </div>
-
-        <!-- CO2 -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <span class="chart-title">
-                    <span class="chart-dot" style="background:#d97706"></span>
-                    CO2 (ADC thô)
-                </span>
-                <span class="chart-latest" id="chart_co2_latest">--</span>
-            </div>
-            <div class="chart-body">
-                <canvas id="chart_co2"></canvas>
-                <div class="chart-no-data" id="no_data_co2">Chờ dữ liệu...</div>
-            </div>
-        </div>
-
-
-
-        <!-- RSSI -->
-        <div class="chart-card">
-            <div class="chart-header">
-                <span class="chart-title">
-                    <span class="chart-dot" style="background:#7c3aed"></span>
-                    RSSI BW16
-                </span>
-                <span class="chart-latest" id="chart_rssi_latest">--</span>
-            </div>
-            <div class="chart-body">
-                <canvas id="chart_rssi"></canvas>
-                <div class="chart-no-data" id="no_data_rssi">Chờ dữ liệu...</div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Log -->
-    <div class="card">
-        <div class="card-body">
-            <div class="log-header">
-                <span class="card-title">Nhật ký hệ thống</span>
-                <button class="btn btn-ghost" onclick="clearLogs()">Xóa</button>
-            </div>
-            <textarea id="log_console" readonly></textarea>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <div class="footer">
-        <span>Drone IoT — BW16 RTL8720DN + ArduPilot SITL + InfluxDB</span>
-        <span>MQTT WebSocket :8083 (EMQX)</span>
-    </div>
-
-</div>
+</div><!-- .gcs -->
 
 <script type="text/javascript">
     /* Constants */
@@ -1202,17 +1694,17 @@
                             maxTicksLimit: 6,
                             maxRotation: 0
                         },
-                        grid: { color: '#f0f2f5' }
+                        grid: { color: '#1e2d3d' }
                     },
                     y: {
                         suggestedMin: suggestedMin,
                         suggestedMax: suggestedMax,
                         ticks: {
                             font: { family: 'JetBrains Mono', size: 9 },
-                            color: '#9ca3af',
+                            color: '#4a6278',
                             maxTicksLimit: 4
                         },
-                        grid: { color: '#f0f2f5' }
+                        grid: { color: '#1e2d3d' }
                     }
                 }
             }
@@ -1220,10 +1712,10 @@
     }
 
     const charts = {
-        temp: makeChart('chart_temp', '#2563eb', 'Nhiệt độ', '°C',  0,  50),
-        hum:  makeChart('chart_hum',  '#0891b2', 'Độ ẩm',    '%',   0, 100),
-        co2:  makeChart('chart_co2',  '#d97706', 'CO2',      'ADC', 0, 4095),
-        rssi: makeChart('chart_rssi', '#7c3aed', 'RSSI',    'dBm', -90, -20)
+        temp: makeChart('chart_temp', '#fb923c', 'Temperature', '°C',  0,  50),
+        hum:  makeChart('chart_hum',  '#38bdf8', 'Humidity',    '%',   0, 100),
+        co2:  makeChart('chart_co2',  '#fbbf24', 'CO2',         'ADC', 0, 4095),
+        rssi: makeChart('chart_rssi', '#a78bfa', 'RSSI',        'dBm', -90, -20)
     };
 
     function pushChart(chartKey, value, latestId, noDataId, unit) {
@@ -1445,6 +1937,21 @@
             if (d.temp  != null && !isNaN(+d.temp))  latestTemp  = +d.temp;
             if (d.co2   != null && !isNaN(+d.co2))   latestCo2   = +d.co2;
             if (d.alert != null)                      latestAlert = d.alert;
+
+            // === [ENV-MAP] Cập nhật overlay badges trên bản đồ ===
+            const tempBadge = document.getElementById('env_temp_badge');
+            const co2Badge  = document.getElementById('env_co2_badge');
+            if (tempBadge && latestTemp !== null) {
+                const cls = latestTemp >= 45 ? 'danger' : latestTemp >= 35 ? 'warn' : '';
+                tempBadge.className = 'env-badge' + (cls ? ' ' + cls : '');
+                tempBadge.querySelector('span').textContent = `Temp: ${latestTemp.toFixed(1)}°C`;
+            }
+            if (co2Badge && latestCo2 !== null) {
+                const cls = latestCo2 >= 700 ? 'danger' : latestCo2 >= 400 ? 'warn' : '';
+                co2Badge.className = 'env-badge' + (cls ? ' ' + cls : '');
+                co2Badge.querySelector('span').textContent = `CO₂: ${latestCo2} ADC`;
+            }
+
 
             // Charts
             pushChart('temp', d.temp,     'chart_temp_latest', 'no_data_temp', '°C');
