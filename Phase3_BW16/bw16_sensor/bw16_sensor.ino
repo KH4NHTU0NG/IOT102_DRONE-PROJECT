@@ -23,6 +23,9 @@ const int   mqtt_port   = 1883;
 #define DHT_TYPE        DHT22
 #define MQ135_PIN       PB3
 
+#define TRIG_PIN        PB2
+#define ECHO_PIN        PB1
+
 #define BUZZER_PIN      PA14
 #define LED_PIN         PA15   // LED Đỏ (cảnh báo)
 #define LED_GREEN_PIN   PA27   // LED Xanh (an toàn)
@@ -84,6 +87,7 @@ const long    oledInterval = 200;
 float temp_val = 0.0;
 float hum_val  = 0.0;
 int   mq_raw_val = 0;
+float sonar_dist = 0.0;
 bool  env_alert = false;
 
 // --- JSON Parser ---
@@ -152,6 +156,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
         String fenceStr = parseJsonField(msgString, "fence");
         if (fenceStr.length() > 0) flight_fence = fenceStr.toInt();
+
+        String rollStr = parseJsonField(msgString, "roll");
+        if (rollStr.length() > 0) {
+            float roll = rollStr.toFloat();
+            // Convert roll (radians) to angle (degrees) and map to servo
+            // Negative roll (left turn) -> Servo looks left (< 90)
+            // Positive roll (right turn) -> Servo looks right (> 90)
+            int angle = 90 + (roll * 180.0 / 3.14159);
+            // Constrain between 45 and 135 degrees to prevent wire tangling
+            angle = constrain(angle, 45, 135);
+            payloadServo.write(angle);
+        }
+
         return; // Terminate callback processing for telemetry packets
     }
 
@@ -263,6 +280,9 @@ void setup() {
     digitalWrite(LED_GREEN_PIN, LED_ON);
 
     pinMode(MQ135_PIN, INPUT);
+    
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
 
     // OLED
     if(!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
@@ -325,6 +345,19 @@ void loop() {
 
         mq_raw_val = analogRead(MQ135_PIN);
 
+        // Sonar reading
+        digitalWrite(TRIG_PIN, LOW);
+        delayMicroseconds(2);
+        digitalWrite(TRIG_PIN, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(TRIG_PIN, LOW);
+        long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout (~5m)
+        if (duration == 0) {
+            sonar_dist = -1.0; // Timeout / Out of range
+        } else {
+            sonar_dist = (duration * 0.0343) / 2.0;
+        }
+
         if (now > MQ135_WARMUP_MS) {
             env_alert = (mq_raw_val > CO2_THRESHOLD);
         }
@@ -348,8 +381,8 @@ void loop() {
         // Build & publish JSON
         char jsonBuf[256];
         snprintf(jsonBuf, sizeof(jsonBuf),
-            "{\"temp\":%.1f,\"humidity\":%.1f,\"co2\":%d,\"alert\":%d,\"rssi\":%d,\"dht_ok\":%d}",
-            temp_val, hum_val, mq_raw_val, env_alert ? 1 : 0, (int)WiFi.RSSI(), dht_ok ? 1 : 0);
+            "{\"temp\":%.1f,\"humidity\":%.1f,\"co2\":%d,\"distance\":%.1f,\"alert\":%d,\"rssi\":%d,\"dht_ok\":%d}",
+            temp_val, hum_val, mq_raw_val, sonar_dist, env_alert ? 1 : 0, (int)WiFi.RSSI(), dht_ok ? 1 : 0);
 
         if (client.connected() && client.publish(topic_sensors, jsonBuf)) {
             Serial.print("[SEND] ");
@@ -372,13 +405,12 @@ void updateOLED(bool env_alert) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
-    // 1. Dòng 1: WiFi/MQTT Status & Flight Mode (Nằm trọn trong vùng màu VÀNG)
-    display.setCursor(0, 2);
+    // 1. Dòng 1: WiFi/MQTT Status & Flight Mode
+    display.setCursor(0, 0);
     display.print(WiFi.status() == WL_CONNECTED ? "W:OK" : "W:NO");
     display.print(client.connected() ? " M:OK" : " M:NO");
-    display.print(" | ");
+    display.print("|");
     
-    // Kiểm tra Watchdog Link Lost (5 giây không nhận được telemetry)
     bool link_lost = (millis() - lastTelemetryTime > 5000);
     if (link_lost) {
         display.print("L-LOST");
@@ -387,55 +419,54 @@ void updateOLED(bool env_alert) {
         display.print(drone_armed ? "*" : "");
     }
 
-    // Đường kẻ phân cách 1: Đặt tại y=14 để phân tách ranh giới màu Vàng/Xanh (y=16)
-    display.drawLine(0, 14, 128, 14, SSD1306_WHITE);
+    display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
 
-    // 2. Dòng 2: Độ cao (ALT) và Tốc độ bay (SPD) (Nằm trọn trong vùng màu XANH)
-    display.setCursor(0, 17);
-    display.print("ALT: ");
+    // 2. Dòng 2: Độ cao (ALT) và Tốc độ bay (SPD)
+    display.setCursor(0, 12);
+    display.print("ALT:");
     if (link_lost) display.print("--");
     else { display.print(flight_alt, 1); display.print("m"); }
     
-    display.setCursor(68, 17);
+    display.setCursor(64, 12);
     display.print("SPD:");
     if (link_lost) display.print("--");
     else { display.print(flight_spd, 1); display.print("m/s"); }
 
-    // 3. Dòng 3: Điện áp PIN (BATT) và Tốc độ gió giật (WIND)
-    display.setCursor(0, 26);
-    display.print("BAT: ");
+    // 3. Dòng 3: Điện áp PIN (BATT) và Gió (WND)
+    display.setCursor(0, 22);
+    display.print("BAT:");
     if (link_lost) display.print("--");
     else { display.print(flight_batt, 1); display.print("V"); }
     
-    display.setCursor(68, 26);
+    display.setCursor(64, 22);
     display.print("WND:");
     if (link_lost) display.print("--");
     else { display.print(flight_wind, 1); display.print("m/s"); }
 
-    display.drawLine(0, 35, 128, 35, SSD1306_WHITE);
+    // 4. Dòng 4: Nhiệt độ & CO2
+    display.setCursor(0, 32);
+    display.print("Tmp:");
+    display.print(temp_val, 1);
+    display.print("C");
 
-    // 4. Dòng 4: Hàng rào ảo (FENCE) và Trạng thái cảm biến thật (DHT22)
-    display.setCursor(0, 38);
-    display.print("FENCE: ");
-    if (link_lost || flight_fence == 0) display.print("OFF");
-    else if (flight_fence == 1) display.print("OK");
-    else display.print("BREACH");
-
-    display.setCursor(68, 38);
-    // Kiểm tra xem DHT22 có hoạt động bình thường không
-    bool dht_ok = !(isnan(temp_val) || isnan(hum_val) || (temp_val == 0.0 && hum_val == 0.0));
-    display.print("DHT: ");
-    display.print(dht_ok ? "OK" : "ERR");
-
-    display.drawLine(0, 47, 128, 47, SSD1306_WHITE);
-
-    // 5. Dòng 5 & 6: Khí Gas/CO2 và Trạng thái cảnh báo tổng thể
-    display.setCursor(0, 50);
-    display.print("GAS/CO2: ");
+    display.setCursor(64, 32);
+    display.print("CO2:");
     display.print(mq_raw_val);
-    display.print(" ADC");
 
-    display.setCursor(0, 57);
+    // 5. Dòng 5: Sonar Distance & Air Quality
+    display.setCursor(0, 42);
+    display.print("Dst:");
+    if (sonar_dist < 0) display.print("ERR");
+    else { display.print(sonar_dist, 1); display.print("cm"); }
+
+    display.setCursor(64, 42);
+    display.print("Air:");
+    display.print(env_alert ? "WARN" : "SAFE");
+
+    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
+
+    // 6. Dòng 6: Trạng thái tổng
+    display.setCursor(0, 55);
     if (env_alert) {
         display.print("! GAS/ENV ALERT !");
     } else if (link_lost) {

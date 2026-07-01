@@ -58,6 +58,7 @@ current_alt = 0.0
 current_spd = 0.0
 current_batt = 12.6
 current_wind = 0.0
+current_roll = 0.0
 current_fence_enabled = 0
 
 def get_distance_meters(lat1, lon1, lat2, lon2):
@@ -642,7 +643,7 @@ def mavlink_loop():
                         elif msg_type == 'SYS_STATUS':
                             latest_sys = msg
 
-            global current_mode, current_armed, current_alt, current_spd, current_batt
+            global current_mode, current_armed, current_alt, current_spd, current_batt, current_roll
             
             if latest_gps is not None:
                 current_alt = latest_gps.relative_alt / 1000.0
@@ -699,6 +700,7 @@ def mavlink_loop():
                     pass
 
             if latest_attitude is not None and mqtt_pub is not None:
+                current_roll = latest_attitude.roll
                 attitude_payload = json.dumps({
                     "roll": latest_attitude.roll,
                     "pitch": latest_attitude.pitch,
@@ -811,7 +813,8 @@ def main():
                     "spd": float(current_spd),
                     "batt": float(current_batt),
                     "wind": float(current_wind),
-                    "fence": int(fence_status)
+                    "fence": int(fence_status),
+                    "roll": float(current_roll)
                 })
                 try:
                     if mqtt_client and mqtt_client.is_connected():

@@ -429,9 +429,13 @@
                         <div class="metric-label">Air Quality</div>
                         <div class="metric-value" style="font-size:12px;"><span id="alert_value" class="ok">SAFE</span></div>
                     </div>
-                    <div class="metric metric-full">
+                    <div class="metric">
                         <div class="metric-label">RSSI BW16</div>
                         <div class="metric-value val-rssi"><span id="rssi_value">--</span><span class="metric-unit">dBm</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Sonar Dist</div>
+                        <div class="metric-value val-sonar" style="color:var(--cyan)"><span id="sonar_value">--</span><span class="metric-unit">cm</span></div>
                     </div>
                 </div>
             </div>
@@ -710,6 +714,7 @@
     const co2El       = document.getElementById('co2_value');
     const alertEl     = document.getElementById('alert_value');
     const rssiEl      = document.getElementById('rssi_value');
+    const sonarEl     = document.getElementById('sonar_value');
 
     /* State */
     let client           = null;
@@ -1001,6 +1006,14 @@
             }
 
             if (d.rssi != null) rssiEl.textContent = d.rssi;
+            if (d.distance != null) {
+                sonarEl.textContent = d.distance >= 0 ? d.distance.toFixed(1) : 'ERR';
+                if (d.distance >= 0 && d.distance < 50) {
+                    sonarEl.style.color = '#ef4444'; // Danger red if too close
+                } else {
+                    sonarEl.style.color = 'var(--cyan)';
+                }
+            }
 
             // === [ENV-MAP] Cập nhật biến toàn cục cho bản đồ màu ===
             if (d.temp  != null && !isNaN(+d.temp))  latestTemp  = +d.temp;
