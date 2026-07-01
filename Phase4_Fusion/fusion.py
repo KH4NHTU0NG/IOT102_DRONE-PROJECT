@@ -60,6 +60,7 @@ current_batt = 12.6
 current_wind = 0.0
 current_roll = 0.0
 current_fence_enabled = 0
+is_uploading_mission = False
 
 def get_distance_meters(lat1, lon1, lat2, lon2):
     """Tính khoảng cách Haversine giữa 2 tọa độ GPS (m)."""
@@ -379,10 +380,12 @@ def _handle_sim_param(param_id: str, value: float):
 
 def _upload_mission_thread(points):
     """Uploads a mission using MAVLink waypoint protocol"""
+    global is_uploading_mission
     with master_lock:
         if master is None:
             return
         
+        is_uploading_mission = True
         try:
             print(f"[MISSION] Bắt đầu xóa mission cũ...")
             master.waypoint_clear_all_send()
@@ -456,6 +459,8 @@ def _upload_mission_thread(points):
                 
         except Exception as e:
             print(f"[MISSION] ❌ Ngoại lệ khi upload: {e}")
+        finally:
+            is_uploading_mission = False
 
 
 def on_connect(client, userdata, flags, reason_code, properties):
@@ -615,6 +620,11 @@ def mavlink_loop():
             except Exception:
                 time.sleep(5)
                 continue
+            continue
+
+        global is_uploading_mission
+        if is_uploading_mission:
+            time.sleep(0.1)
             continue
 
         try:
