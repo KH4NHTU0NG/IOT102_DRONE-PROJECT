@@ -1441,6 +1441,11 @@
 
             if (d.rssi != null) rssiEl.textContent = d.rssi;
 
+            // === [ENV-MAP] Cập nhật biến toàn cục cho bản đồ màu ===
+            if (d.temp  != null && !isNaN(+d.temp))  latestTemp  = +d.temp;
+            if (d.co2   != null && !isNaN(+d.co2))   latestCo2   = +d.co2;
+            if (d.alert != null)                      latestAlert = d.alert;
+
             // Charts
             pushChart('temp', d.temp,     'chart_temp_latest', 'no_data_temp', '°C');
             pushChart('hum',  humVal,     'chart_hum_latest',  'no_data_hum',  '%');
@@ -1577,6 +1582,30 @@
     let mapInitialized = false;
     let droneIcon = null;
 
+    // === [ENV-MAP] Color-coded trajectory state ===
+    let trailSegments = [];        // Mảng các polyline ngắn có màu
+    let pollutionMarkers = [];     // Mảng icon cảnh báo trên bản đồ
+    let lastTrailLatLng = null;    // Điểm cuối của đoạn trước để nối liền
+
+    // Biến chia sẻ dữ liệu cảm biến mới nhất cho bản đồ
+    let latestTemp  = null;
+    let latestCo2   = null;
+    let latestAlert = 0;
+
+    // Hàm tính màu quỹ đạo theo ngưỡng môi trường
+    function getTrailColor() {
+        if (latestAlert === 1)           return '#dc2626'; // Đỏ: Cảnh báo khẩn cấp
+        if (latestTemp !== null) {
+            if (latestTemp >= 45)        return '#dc2626'; // Đỏ: Nhiệt độ cực cao (cháy rừng)
+            if (latestTemp >= 35)        return '#f59e0b'; // Vàng: Nhiệt độ cao
+        }
+        if (latestCo2 !== null && !isNaN(latestCo2)) {
+            if (latestCo2 >= 700)        return '#dc2626'; // Đỏ: CO2 nguy hiểm
+            if (latestCo2 >= 400)        return '#f59e0b'; // Vàng: CO2 trung bình
+        }
+        return '#16a34a';                                  // Xanh: Môi trường trong lành
+    }
+
     function initMap(lat, lon) {
         if (mapInitialized) return;
         const container = document.getElementById('map');
@@ -1598,7 +1627,22 @@
             iconAnchor: [13, 13]
         });
         droneMapMarker = L.marker([lat, lon], { icon: droneIcon }).addTo(map).bindTooltip('Drone');
-        droneTrail = L.polyline([], { color: '#ef4444', weight: 2, opacity: 0.7 }).addTo(map);
+        // [ENV-MAP] Không dùng polyline tĩnh nữa — quỹ đạo được tô màu theo từng đoạn
+        droneTrail = null; // Thay bằng hệ thống trailSegments động
+
+        // Thêm Legend bảng chú giải màu môi trường vào bản đồ
+        const legend = L.control({ position: 'bottomright' });
+        legend.onAdd = function() {
+            const div = L.DomUtil.create('div');
+            div.style.cssText = 'background:#1e293b;color:#f1f5f9;padding:8px 10px;border-radius:8px;font-size:11px;font-family:monospace;border:1px solid #334155;line-height:1.7;';
+            div.innerHTML = '<b style="color:#94a3b8">📊 Chất lượng không khí</b><br>'
+                          + '<span style="color:#16a34a">●</span> An toàn (Temp &lt;35°C, CO2 thấp)<br>'
+                          + '<span style="color:#f59e0b">●</span> Chú ý (Temp 35–45°C, CO2 400–700)<br>'
+                          + '<span style="color:#dc2626">●</span> Nguy hiểm (Temp &gt;45°C / Alert)<br>'
+                          + '<span>☠️</span> Điểm phát hiện khí độc';
+            return div;
+        };
+        legend.addTo(map);
         waypointPolyline = L.polyline([], { color: '#3b82f6', weight: 2, dashArray: '6 4' }).addTo(map);
         geofenceCircle = L.circle([lat, lon], {
             radius: 50, color: 'gray', weight: 1.5,
@@ -1626,21 +1670,69 @@
             return;
         }
         droneMapMarker.setLatLng([lat, lon]);
-        droneTrail.addLatLng([lat, lon]);
-        const trailCoords = droneTrail.getLatLngs();
-        if (trailCoords.length > 200) droneTrail.setLatLngs(trailCoords.slice(-200));
+
+        // === [ENV-MAP] Vẽ đoạn quỹ đạo có màu theo cảm biến ===
+        const currentLatLng = [lat, lon];
+        const color = getTrailColor();
+
+        if (lastTrailLatLng !== null) {
+            // Vẽ đoạn polyline từ điểm trước tới điểm hiện tại với màu hiện tại
+            const segment = L.polyline([lastTrailLatLng, currentLatLng], {
+                color: color,
+                weight: 4,
+                opacity: 0.85
+            }).addTo(map);
+            trailSegments.push(segment);
+
+            // Giữ tối đa 300 đoạn để không lag bản đồ
+            if (trailSegments.length > 300) {
+                const old = trailSegments.shift();
+                map.removeLayer(old);
+            }
+
+            // Nếu có cảnh báo Alert = 1 → Thả icon ☠️ tại tọa độ hiện tại
+            if (latestAlert === 1) {
+                const lastPMarker = pollutionMarkers[pollutionMarkers.length - 1];
+                // Tránh thêm icon trùng lặp quá gần nhau (cách nhau ít nhất 0.0001 độ)
+                const tooClose = lastPMarker &&
+                    Math.abs(lastPMarker.getLatLng().lat - lat) < 0.0001 &&
+                    Math.abs(lastPMarker.getLatLng().lng - lon) < 0.0001;
+
+                if (!tooClose) {
+                    const pIcon = L.divIcon({
+                        html: '<div style="font-size:18px;filter:drop-shadow(0 0 4px #dc2626);">☠️</div>',
+                        className: '', iconSize: [22, 22], iconAnchor: [11, 11]
+                    });
+                    const pMarker = L.marker([lat, lon], { icon: pIcon })
+                        .addTo(map)
+                        .bindTooltip(`⚠️ Khí độc phát hiện!\nTemp: ${latestTemp}°C | CO2: ${latestCo2}`, {
+                            permanent: false, direction: 'top'
+                        });
+                    pollutionMarkers.push(pMarker);
+                    addLog(`[ENV] ☠️ Điểm ô nhiễm được ghi nhận tại (${lat.toFixed(5)}, ${lon.toFixed(5)})`);
+                }
+            }
+        }
+        lastTrailLatLng = currentLatLng;
     }
 
     function clearMap() {
         if (!mapInitialized) return;
+        // Xóa Waypoints
         waypoints = [];
         waypointMarkers.forEach(m => map.removeLayer(m));
         waypointMarkers = [];
         waypointPolyline.setLatLngs([]);
-        droneTrail.setLatLngs([]);
+        // [ENV-MAP] Xóa các đoạn quỹ đạo màu
+        trailSegments.forEach(s => map.removeLayer(s));
+        trailSegments = [];
+        lastTrailLatLng = null;
+        // [ENV-MAP] Xóa các icon cảnh báo ô nhiễm
+        pollutionMarkers.forEach(m => map.removeLayer(m));
+        pollutionMarkers = [];
         const wp_el = document.getElementById('wp_count_display');
         if (wp_el) wp_el.textContent = '0 điểm';
-        addLog('[MAP] Đã xóa tất cả waypoints và quỹ đạo');
+        addLog('[MAP] Đã xóa tất cả waypoints, quỹ đạo màu và điểm ô nhiễm');
     }
 
     function uploadMission() {
