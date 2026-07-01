@@ -1246,6 +1246,8 @@
             }).addTo(map).bindTooltip('WP' + n);
             waypointMarkers.push(m);
             waypointPolyline.setLatLngs(waypoints);
+            const wp_el = document.getElementById('wp_count_display');
+            if (wp_el) wp_el.textContent = waypoints.length + ' điểm';
             addLog(`[MAP] Thêm Waypoint ${n}: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`);
         });
 
