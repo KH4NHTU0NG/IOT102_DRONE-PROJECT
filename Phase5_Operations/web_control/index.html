@@ -1210,7 +1210,7 @@
         }).addTo(map);
 
         droneIcon = L.divIcon({
-            html: '<div style="font-size:22px;line-height:1;"></div>',
+            html: '<div style="font-size:22px;line-height:1;">🚁</div>',
             className: '',
             iconSize: [26, 26],
             iconAnchor: [13, 13]
@@ -1289,7 +1289,7 @@
 
                 if (!tooClose) {
                     const pIcon = L.divIcon({
-                        html: '<div style="font-size:18px;filter:drop-shadow(0 0 4px #dc2626);"></div>',
+                        html: '<div style="font-size:18px;filter:drop-shadow(0 0 4px #dc2626);">⚠️</div>',
                         className: '', iconSize: [22, 22], iconAnchor: [11, 11]
                     });
                     const pMarker = L.marker([lat, lon], { icon: pIcon })
