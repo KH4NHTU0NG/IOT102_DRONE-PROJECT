@@ -129,8 +129,9 @@
             grid-template-rows: 1fr 120px 34px;
             overflow: hidden;
             background: var(--bg-2);
+            min-height: 0;
         }
-        .map-area { position: relative; overflow: hidden; }
+        .map-area { position: relative; overflow: hidden; min-height: 0; }
         #map { width: 100%; height: 100%; min-height: 0; }
 
         /* Map overlays */
@@ -189,13 +190,29 @@
             padding: 0 10px;
             display: flex; align-items: center; gap: 8px;
             overflow: hidden;
+            height: 34px;
+            min-height: 34px;
+            max-height: 34px;
+            flex-shrink: 0;
         }
         .log-label { font-size: 9px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.09em; flex-shrink: 0; }
         #log_console {
-            flex: 1; background: transparent; border: none;
-            color: var(--green); font-family: 'JetBrains Mono', monospace;
-            font-size: 10px; outline: none; resize: none;
-            overflow: hidden; white-space: nowrap; height: 100%; padding: 0;
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--green);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            outline: none;
+            resize: none;
+            overflow: hidden;
+            white-space: nowrap;
+            height: 20px;
+            line-height: 20px;
+            padding: 0;
+            cursor: default;
+            pointer-events: none;
+            display: block;
         }
 
         /* ======= PANEL (sidebar sections) ======= */
@@ -1306,19 +1323,26 @@
     }
 
     /* Log */
+    // Log buffer - keep full history in memory, show only latest in ticker
+    let _logBuffer = [];
+
     function addLog(msg) {
         const d = new Date();
         const ts = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-        logConsole.value += `[${ts}] ${msg}\n`;
-        logConsole.scrollTop = logConsole.scrollHeight;
-        logLineCount++;
-        if (logLineCount > 202) {
-            const lines = logConsole.value.split('\n');
-            logConsole.value = lines.slice(lines.length - 200).join('\n');
-            logLineCount = 200;
+        const line = `[${ts}] ${msg}`;
+        _logBuffer.push(line);
+        if (_logBuffer.length > 500) _logBuffer.shift();
+        // Single-line ticker: show only latest entry
+        if (logConsole) {
+            logConsole.value = line;
         }
+        logLineCount = _logBuffer.length;
     }
-    function clearLogs() { logConsole.value = ""; logLineCount = 0; }
+    function clearLogs() {
+        _logBuffer = [];
+        logLineCount = 0;
+        if (logConsole) logConsole.value = '';
+    }
     function pad(n) { return String(n).padStart(2, '0'); }
 
     /* Init */
