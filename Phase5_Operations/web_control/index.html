@@ -913,6 +913,7 @@
             reconnectAttempts++;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
             addLog(`[CONN] Thử lại sau ${delay / 1000}s (lần #${reconnectAttempts})`);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
             reconnectTimer = setTimeout(() => startConnection(), delay);
         }
     }
@@ -1301,6 +1302,12 @@
                         });
                     pollutionMarkers.push(pMarker);
                     addLog(`[ENV]  Điểm ô nhiễm được ghi nhận tại (${lat.toFixed(5)}, ${lon.toFixed(5)})`);
+                    
+                    // Giữ tối đa 300 điểm cảnh báo để không lag
+                    if (pollutionMarkers.length > 300) {
+                        const old = pollutionMarkers.shift();
+                        map.removeLayer(old);
+                    }
                 }
             }
         }

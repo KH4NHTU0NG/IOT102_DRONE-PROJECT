@@ -124,11 +124,7 @@ String parseJsonField(const String& json, const String& key) {
 
 // --- MQTT Callback ---
 void callback(char* topic, byte* payload, unsigned int length) {
-    String msgString;
-    msgString.reserve(length);
-    for (unsigned int i = 0; i < length; i++) {
-        msgString += (char)payload[i];
-    }
+    String msgString((char*)payload, length);
 
     Serial.print("[MQTT] ");
     Serial.println(msgString);

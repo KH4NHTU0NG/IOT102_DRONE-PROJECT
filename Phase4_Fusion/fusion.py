@@ -655,20 +655,23 @@ def mavlink_loop():
 
             global current_mode, current_armed, current_alt, current_spd, current_batt, current_roll
             
-            if latest_gps is not None:
-                current_alt = latest_gps.relative_alt / 1000.0
-                with state_lock:
+            with state_lock:
+                if latest_gps is not None:
+                    current_alt = latest_gps.relative_alt / 1000.0
                     gps_data = {
                         "lat": latest_gps.lat / 1e7,
                         "lon": latest_gps.lon / 1e7,
                         "alt": current_alt
                     }
 
-            if latest_vfr is not None:
-                current_spd = latest_vfr.groundspeed
+                if latest_vfr is not None:
+                    current_spd = latest_vfr.groundspeed
 
-            if latest_sys is not None:
-                current_batt = latest_sys.voltage_battery / 1000.0  # mV to V
+                if latest_sys is not None:
+                    current_batt = latest_sys.voltage_battery / 1000.0
+
+                if latest_attitude is not None:
+                    current_roll = latest_attitude.roll
 
             # [FIX] Publish flight status (mode + armed) từ HEARTBEAT
             latest_hb = None
