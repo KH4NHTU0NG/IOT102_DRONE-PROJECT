@@ -19,7 +19,7 @@ INFLUX_TOKEN  = "YOUR_INFLUXDB_TOKEN_HERE"
 INFLUX_ORG    = "drone_org"
 INFLUX_BUCKET = "drone_data"
 
-MQTT_BROKER = "broker.emqx.io"
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT   = 1883
 
 TOPIC_SENSORS     = "iot102_drone/payload/sensors"

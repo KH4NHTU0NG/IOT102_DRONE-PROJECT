@@ -672,7 +672,7 @@
             <div class="panel-body">
                 <div class="field">
                     <label>Broker Host</label>
-                    <input type="text" id="mqtt_host" value="broker.emqx.io">
+                    <input type="text" id="mqtt_host" value="broker.hivemq.com">
                 </div>
                 <div class="field">
                     <label>Port (WebSocket)</label>
@@ -811,7 +811,7 @@
 
     /* Connection */
     function startConnection() {
-        const host = hostInput.value.trim() || 'broker.emqx.io';
+        const host = hostInput.value.trim() || 'broker.hivemq.com';
         const isHttps = window.location.protocol === 'https:';
         let port = Number(portInput.value);
         if (!port) port = isHttps ? 8084 : 8083;

@@ -13,7 +13,7 @@
 // --- Network Config ---
 const char* ssid        = SECRET_SSID;
 const char* password    = SECRET_PASS;
-const char* mqtt_server = "broker.emqx.io";
+const char* mqtt_server = "broker.hivemq.com";
 const char* topic_sensors = "iot102_drone/payload/sensors";
 const char* topic_payload = "iot102_drone/control/payload";
 const int   mqtt_port   = 1883;
@@ -124,7 +124,11 @@ String parseJsonField(const String& json, const String& key) {
 
 // --- MQTT Callback ---
 void callback(char* topic, byte* payload, unsigned int length) {
-    String msgString((char*)payload, length);
+    String msgString;
+    msgString.reserve(length);
+    for (unsigned int i = 0; i < length; i++) {
+        msgString += (char)payload[i];
+    }
 
     Serial.print("[MQTT] ");
     Serial.println(msgString);
