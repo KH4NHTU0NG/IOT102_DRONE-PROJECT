@@ -676,7 +676,7 @@
                 </div>
                 <div class="field">
                     <label>Port (WebSocket)</label>
-                    <input type="number" id="mqtt_port" value="8083">
+                    <input type="number" id="mqtt_port" value="8000">
                 </div>
                 <button id="btn_connect_2" class="btn btn-connect-on btn-full" onclick="toggleConnection()">Connect</button>
             </div>
@@ -814,7 +814,7 @@
         const host = hostInput.value.trim() || 'broker.hivemq.com';
         const isHttps = window.location.protocol === 'https:';
         let port = Number(portInput.value);
-        if (!port) port = isHttps ? 8084 : 8083;
+        if (!port) port = isHttps ? 8884 : 8000;
         const useSSL = isHttps || port === 8084 || port === 443 || port === 8884;
         const clientId = 'web_' + Math.random().toString(16).slice(2, 10);
 
