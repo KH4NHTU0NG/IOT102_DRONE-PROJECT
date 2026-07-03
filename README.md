@@ -131,23 +131,16 @@ bash setup_venv.sh
 # Vào đúng thư mục gốc trước
 cd <đường dẫn đến IOT102_DRONE-PROJECT>
 
-# Một lệnh khởi động toàn bộ hệ thống (Docker + Kết nối USB Mamba)
+# ---------------------------------------------------------
+# CHẾ ĐỘ 1: BAY MÔ PHỎNG (SITL) - CÓ BẢN ĐỒ VÀ QGROUNDCONTROL
+# ---------------------------------------------------------
 bash Phase5_Operations/start_all.sh
-```
 
-Hoặc thủ công từng bước (cũng chạy từ `IOT102_DRONE-PROJECT/`):
-
-```bash
-cd <đường dẫn đến IOT102_DRONE-PROJECT>
-
-# 1. Bật Server dữ liệu (Docker)
-cd Phase1_Docker && docker compose up -d && cd ..
-
-# 2. Cắm cáp USB mạch Mamba F405 vào máy tính.
-
-# 3. Fusion Gateway (Bắt cầu nối)
-cd Phase5_Operations
-bash start_all.sh
+# ---------------------------------------------------------
+# CHẾ ĐỘ 2: THỬ NGHIỆM PHẦN CỨNG (MAMBA F405) - LẮC VẬT LÝ
+# (Lưu ý: Chế độ này không có sóng GPS nên Map sẽ đứng im)
+# ---------------------------------------------------------
+bash Phase5_Operations/start_mamba_hw.sh
 ```
 
 ---
