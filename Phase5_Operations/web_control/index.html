@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
     <!-- [NEW] Leaflet CSS for Live Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -504,6 +505,7 @@
         <div class="map-area">
             <div id="map"></div>
             <div class="map-overlay-controls">
+                <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" id="btnHeatmap" onclick="toggleHeatmap()">Bật Heatmap</button>
                 <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" onclick="clearMap()">Clear Map</button>
                 <button class="btn btn-primary" style="backdrop-filter:blur(6px);" onclick="uploadMission()">Upload Mission</button>
             </div>
@@ -1172,6 +1174,11 @@
     let mapInitialized = false;
     let droneIcon = null;
 
+    // === Heatmap Variables ===
+    let heatLayer = null;
+    let heatData = [];
+    let isHeatmapActive = false;
+
     // === [ENV-MAP] Color-coded trajectory state ===
     let trailSegments = [];        // Mảng các polyline ngắn có màu
     let pollutionMarkers = [];     // Mảng icon cảnh báo trên bản đồ
@@ -1256,12 +1263,43 @@
         addLog('[MAP] Bản đồ đã khởi động!');
     }
 
+    function toggleHeatmap() {
+        isHeatmapActive = !isHeatmapActive;
+        const btn = document.getElementById('btnHeatmap');
+        if (isHeatmapActive) {
+            btn.style.background = 'var(--cyan)';
+            btn.style.color = '#000';
+            btn.textContent = 'Tắt Heatmap';
+            if (!heatLayer) {
+                heatLayer = L.heatLayer(heatData, {radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.5});
+            }
+            heatLayer.addTo(map);
+            addLog('[MAP] Đã BẬT Bản đồ Nhiệt độ');
+        } else {
+            btn.style.background = 'rgba(8,12,16,.82)';
+            btn.style.color = 'var(--text-1)';
+            btn.textContent = 'Bật Heatmap';
+            if (heatLayer) map.removeLayer(heatLayer);
+            addLog('[MAP] Đã TẮT Bản đồ Nhiệt độ');
+        }
+    }
+
     function updateMap(lat, lon) {
         if (!mapInitialized) {
             initMap(lat, lon);
             return;
         }
         droneMapMarker.setLatLng([lat, lon]);
+
+        // Ghi dữ liệu cho Heatmap
+        if (latestTemp !== null) {
+            let intensity = Math.max(0, (latestTemp - 25) * 10); // Scale temp to intensity
+            heatData.push([lat, lon, intensity]);
+            if (heatData.length > 500) heatData.shift(); // Keep last 500 points
+            if (isHeatmapActive && heatLayer) {
+                heatLayer.setLatLngs(heatData);
+            }
+        }
 
         // === [ENV-MAP] Vẽ đoạn quỹ đạo có màu theo cảm biến ===
         const currentLatLng = [lat, lon];
