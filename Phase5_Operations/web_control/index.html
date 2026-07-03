@@ -13,6 +13,7 @@
 
     <!-- [NEW] Leaflet CSS for Live Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -505,6 +506,7 @@
             <div id="map"></div>
             <div class="map-overlay-controls">
                 <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" onclick="clearMap()">Clear Map</button>
+                <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" onclick="toggleHeatmap()">Bản Đồ Nhiệt</button>
                 <button class="btn btn-primary" style="backdrop-filter:blur(6px);" onclick="uploadMission()">Upload Mission</button>
             </div>
             <div class="map-overlay-info">
@@ -1171,6 +1173,9 @@
     let geofenceCircle = null;
     let mapInitialized = false;
     let droneIcon = null;
+    let heatLayer = null;
+    let heatData = [];
+    let isHeatmapVisible = true;
 
     // === [ENV-MAP] Color-coded trajectory state ===
     let trailSegments = [];        // Mảng các polyline ngắn có màu
@@ -1238,6 +1243,11 @@
             radius: 50, color: 'gray', weight: 1.5,
             fillColor: '#f59e0b', fillOpacity: 0.05
         }).addTo(map).bindTooltip('Geofence 50m');
+            
+        heatLayer = L.heatLayer([], {
+            radius: 40, blur: 25, maxZoom: 18, 
+            gradient: {0.3: 'blue', 0.5: 'lime', 0.7: 'yellow', 1.0: 'red'}
+        }).addTo(map);
 
         map.on('click', function(e) {
             const n = waypoints.length + 1;
@@ -1312,6 +1322,16 @@
             }
         }
         lastTrailLatLng = currentLatLng;
+
+        // Cập nhật Heatmap
+        let heatIntensity = 0.1;
+        if (latestCo2 > 100) heatIntensity = 0.3;
+        if (latestCo2 > 400) heatIntensity = 0.6;
+        if (latestCo2 > 700) heatIntensity = 1.0;
+        
+        heatData.push([lat, lon, heatIntensity]);
+        if (heatData.length > 1000) heatData.shift();
+        if (heatLayer) heatLayer.setLatLngs(heatData);
     }
 
     function clearMap() {
@@ -1328,9 +1348,27 @@
         // [ENV-MAP] Xóa các icon cảnh báo ô nhiễm
         pollutionMarkers.forEach(m => map.removeLayer(m));
         pollutionMarkers = [];
+        heatData = [];
+        if (heatLayer) heatLayer.setLatLngs([]);
         const wp_el = document.getElementById('wp_count_display');
         if (wp_el) wp_el.textContent = '0 điểm';
         addLog('[MAP] Đã xóa tất cả waypoints, quỹ đạo màu và điểm ô nhiễm');
+
+        // Gửi lệnh xóa mission lên Drone
+        if (client && isConnected) {
+            client.send(buildMsg({ command: 'CLEAR' }, TOPIC_MISSION));
+        }
+    }
+
+    function toggleHeatmap() {
+        isHeatmapVisible = !isHeatmapVisible;
+        if (isHeatmapVisible) {
+            map.addLayer(heatLayer);
+            addLog('[MAP] Đã BẬT Bản đồ nhiệt');
+        } else {
+            map.removeLayer(heatLayer);
+            addLog('[MAP] Đã TẮT Bản đồ nhiệt');
+        }
     }
 
     function uploadMission() {

@@ -12,6 +12,7 @@ import threading
 import time
 import sys
 import os
+import argparse
 
 # --- Config ---
 INFLUX_URL    = "http://localhost:8086"
@@ -34,8 +35,8 @@ TOPIC_ATTITUDE    = "iot102_drone/telemetry/attitude"
 TOPIC_GPS         = "iot102_drone/telemetry/gps"
 TOPIC_STATUS      = "iot102_drone/telemetry/status"  # [FIX] Phản hồi trạng thái bay về Web
 
-SITL_HOST = "127.0.0.1"
-SITL_PORT = 5763  # Restore to 5763 for dedicated telemetry stream
+CONNECTION_STRING = "tcp:127.0.0.1:5763"  # Default to SITL
+BAUDRATE = 115200
 
 FAILSAFE_TIMEOUT = 15  # [NEW] Giây không có heartbeat → RTL
 
@@ -166,7 +167,7 @@ def _handle_mode(mode_name):
     try:
         with master_lock:
             if master is None:
-                _publish_status("ERROR", f"SITL chưa kết nối")
+                _publish_status("ERROR", f"MAVLink chưa kết nối")
                 return
         print(f"[MAVLINK] Requesting mode: {mode_name}")
         _publish_status("BUSY", f"Chuyển mode → {mode_name}")
@@ -187,7 +188,7 @@ def _handle_arm():
     try:
         with master_lock:
             if master is None:
-                _publish_status("ERROR", "SITL chưa kết nối")
+                _publish_status("ERROR", "MAVLink chưa kết nối")
                 return
 
         _publish_status("BUSY", "Đang ARM...")
@@ -224,7 +225,7 @@ def _handle_disarm():
     try:
         with master_lock:
             if master is None:
-                _publish_status("ERROR", "SITL chưa kết nối")
+                _publish_status("ERROR", "MAVLink chưa kết nối")
                 return
         _publish_status("BUSY", "Đang DISARM...")
         with master_lock:
@@ -251,7 +252,7 @@ def _handle_takeoff(alt):
         alt = max(1.0, min(float(alt), 100.0))
         with master_lock:
             if master is None:
-                _publish_status("ERROR", "SITL chưa kết nối")
+                _publish_status("ERROR", "MAVLink chưa kết nối")
                 return
 
         _publish_status("BUSY", "Đang chuẩn bị cất cánh...")
@@ -309,7 +310,7 @@ def _handle_recovery():
     try:
         with master_lock:
             if master is None:
-                _publish_status("ERROR", "SITL chưa kết nối")
+                _publish_status("ERROR", "MAVLink chưa kết nối")
                 return
         _publish_status("BUSY", "Đang phục hồi hệ thống...")
 
@@ -376,6 +377,23 @@ def _handle_sim_param(param_id: str, value: float):
 
 
 # --- MQTT Callbacks ---
+
+
+def _clear_mission_thread():
+    """Clear all waypoints on the drone"""
+    with master_lock:
+        if master is None:
+            return
+        try:
+            print("[MISSION] Bắt đầu xóa mission trên Drone...")
+            master.waypoint_clear_all_send()
+            ack = master.recv_match(type='MISSION_ACK', blocking=True, timeout=3)
+            if ack and ack.type == 0:
+                print("[MISSION] ✅ Xóa Mission thành công!")
+            else:
+                print(f"[MISSION] ❌ Lỗi xóa mission: {ack}")
+        except Exception as e:
+            print(f"[MISSION] ❌ Ngoại lệ khi xóa mission: {e}")
 
 
 def _upload_mission_thread(points):
@@ -545,6 +563,8 @@ def on_message(client, userdata, msg):
                 pts = data.get("points", [])
                 if pts:
                     threading.Thread(target=_upload_mission_thread, args=(pts,), daemon=True).start()
+            elif command == "CLEAR":
+                threading.Thread(target=_clear_mission_thread, daemon=True).start()
 
         # [NEW] Heartbeat từ Web (Failsafe Watchdog)
         elif topic == TOPIC_HEARTBEAT:
@@ -590,22 +610,22 @@ def start_mqtt() -> mqtt.Client:
 
 # --- MAVLink Thread ---
 
-def connect_sitl(max_retries: int = 5) -> mavutil.mavfile:
-    connection_str = f"tcp:{SITL_HOST}:{SITL_PORT}"
+def connect_mavlink(max_retries: int = 5) -> mavutil.mavfile:
+    global CONNECTION_STRING, BAUDRATE
     for attempt in range(1, max_retries + 1):
         try:
-            print(f"[SITL] Connecting {connection_str} ({attempt}/{max_retries})...")
-            conn = mavutil.mavlink_connection(connection_str)
+            print(f"[MAVLINK] Connecting {CONNECTION_STRING} at baud {BAUDRATE} ({attempt}/{max_retries})...")
+            conn = mavutil.mavlink_connection(CONNECTION_STRING, baud=BAUDRATE)
             conn.wait_heartbeat(timeout=10)
-            print(f"[SITL] ✅ Connected! System ID={conn.target_system}")
+            print(f"[MAVLINK] ✅ Connected! System ID={conn.target_system}")
             return conn
         except Exception as e:
-            print(f"[SITL] Attempt {attempt} failed: {e}")
+            print(f"[MAVLINK] Attempt {attempt} failed: {e}")
             if attempt < max_retries:
                 wait = min(2 ** attempt, 30)
-                print(f"[SITL] Retry in {wait}s...")
+                print(f"[MAVLINK] Retry in {wait}s...")
                 time.sleep(wait)
-    raise ConnectionError("Không kết nối được SITL")
+    raise ConnectionError("Không kết nối được thiết bị")
 def mavlink_loop():
     global master, gps_data
     while True:
@@ -756,7 +776,17 @@ def watchdog_loop():
 # --- Main ---
 
 def main():
-    global master
+    global master, mqtt_pub, CONNECTION_STRING, BAUDRATE
+
+    parser = argparse.ArgumentParser(description="IOT102 Drone Data Fusion Gateway")
+    parser.add_argument('--device', type=str, help='Serial port or TCP/UDP address (e.g., /dev/cu.usbmodem14101)', default=None)
+    parser.add_argument('--baud', type=int, help='Baudrate for serial connection', default=115200)
+    args = parser.parse_args()
+
+    if args.device:
+        CONNECTION_STRING = args.device
+        BAUDRATE = args.baud
+
     print("=" * 60)
     print("  Drone IoT — fusion.py")
     print("=" * 60)
@@ -769,9 +799,9 @@ def main():
     mqtt_client = start_mqtt()
 
     try:
-        master = connect_sitl()
+        master = connect_mavlink()
     except Exception:
-        print("[SITL] ⚠️  Không có kết nối SITL. Sẽ thử lại trong background.")
+        print("[MAVLINK] ⚠️  Không có kết nối MAVLink. Sẽ thử lại trong background.")
 
     threading.Thread(target=mavlink_loop, daemon=True).start()
     threading.Thread(target=watchdog_loop, daemon=True).start()  # [NEW] Failsafe

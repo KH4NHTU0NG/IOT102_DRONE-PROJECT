@@ -470,7 +470,7 @@ void updateOLED(bool env_alert) {
     if (env_alert) {
         display.print("! GAS/ENV ALERT !");
     } else if (link_lost) {
-        display.print("CONNECTING SITL...");
+        display.print("CONNECTING DRONE...");
     } else if (flight_fence == 2) {
         display.print("! FENCE BREACH (RTL) !");
     } else {

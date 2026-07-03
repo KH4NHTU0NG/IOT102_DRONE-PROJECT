@@ -1,7 +1,7 @@
 # BÁO CÁO KỸ THUẬT: HỆ THỐNG GIÁM SÁT MÔI TRƯỜNG DÙNG DRONE VÀ CÔNG NGHỆ IoT
 
 > [!NOTE]  
-> Báo cáo này trình bày thiết kế kiến trúc kỹ thuật và giải thuật tích hợp dữ liệu của hệ thống giám sát môi trường thời gian thực, kết hợp thiết bị phần cứng BW16, phần mềm mô phỏng bay ArduPilot SITL, và các công cụ lưu trữ, trực quan hóa dữ liệu công nghiệp.
+> Báo cáo này trình bày thiết kế kiến trúc kỹ thuật và giải thuật tích hợp dữ liệu của hệ thống giám sát môi trường thời gian thực, kết hợp thiết bị phần cứng BW16, mạch điều khiển bay Mamba F405 (Hardware-In-The-Loop), và các công cụ lưu trữ, trực quan hóa dữ liệu công nghiệp.
 
 ---
 
@@ -42,8 +42,8 @@ graph TD
         Broker[Mosquitto Broker port 1883 & 9001]
     end
 
-    subgraph Lớp_Mô_Phỏng [Lớp Điều Khiển Bay]
-        SITL[ArduPilot SITL Copter]
+    subgraph Lớp_Bay_Thật [Lớp Điều Khiển Bay]
+        FC[Mamba F405 ArduPilot HITL]
     end
 
     subgraph Lớp_Gateway [4. Lớp Gateway tích hợp]
