@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
-# start_all.sh — macOS Phase 5: Khởi động hệ thống SITL
-# Thứ tự: Docker → ArduPilot SITL → Fusion Gateway
+# start_mamba_hw.sh — macOS Phase 5: Khởi động hệ thống HITL (Bàn Test)
+# Thứ tự: Docker → Kiểm tra Mamba → Khởi động Fusion
 # ============================================================
 set -euo pipefail
 
@@ -13,8 +13,8 @@ if [ ! -d "$ROOT_DIR/Phase1_Docker" ] || [ ! -d "$ROOT_DIR/Phase4_Fusion" ]; the
 fi
 
 echo "╔══════════════════════════════════════════════════╗"
-echo "║       Drone IoT — Start All (SITL Mode)          ║"
-echo "║  Thứ tự: Docker → ArduPilot SITL → Fusion        ║"
+echo "║       Drone IoT — Mamba Hardware Test            ║"
+echo "║  Thứ tự: Docker → Mamba F405 → Fusion Gateway    ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo "  ROOT: $ROOT_DIR"
 echo ""
@@ -46,17 +46,19 @@ docker compose up -d
 echo "✅ Docker: iot_mqtt, iot_db, iot_grafana"
 sleep 5
 
-# ── Bước 2: Khởi động ArduPilot SITL ──────────────────────
+# ── Bước 2: Dò tìm Mamba F405 (HITL) ──────────────────────
 echo ""
-echo "━━━ [2/3] Khởi động ArduPilot SITL... ━━━"
-# Khởi động SITL ở background, xuất ra cổng TCP 5763 cho Fusion và UDP 14550 cho QGroundControl
-nohup sim_vehicle.py -v ArduCopter -f quad --out 127.0.0.1:14550 > "$ROOT_DIR/Phase5_Operations/sitl.log" 2>&1 &
-SITL_PID=$!
-echo "$SITL_PID" > "$ROOT_DIR/Phase5_Operations/sitl.pid"
-echo "✅ SITL PID=$SITL_PID (Đang khởi động, vui lòng đợi 10s...)"
-sleep 10
+echo "━━━ [2/3] Dò tìm cổng USB của mạch Mamba F405... ━━━"
+USB_PORT=$(ls /dev/cu.usbmodem* 2>/dev/null | head -n 1 || echo "")
 
-# ── Bước 3: Khởi động Fusion Gateway ──────────────────────
+if [ -z "$USB_PORT" ]; then
+    echo "❌ Không tìm thấy mạch Mamba F405!"
+    echo "   Vui lòng cắm cáp USB nối mạch với máy Mac và thử lại."
+    exit 1
+fi
+echo "✅ Đã tìm thấy mạch Mamba tại cổng: $USB_PORT"
+
+# ── Bước 3: Fusion gateway ────────────────────────────────
 echo ""
 echo "━━━ [3/3] Khởi động Data Fusion Gateway ━━━"
 VENV="$ROOT_DIR/Phase4_Fusion/drone_env"
@@ -67,9 +69,8 @@ fi
 source "$VENV/bin/activate"
 
 echo "  → Khởi động fusion.py trong nền..."
-# Chạy fusion.py không truyền flag --device, nó sẽ tự động dùng tcp:127.0.0.1:5763
-nohup python3 -u "$ROOT_DIR/Phase4_Fusion/fusion.py" \
-    > "$ROOT_DIR/Phase5_Operations/fusion.log" 2>&1 &
+nohup python3 -u "$ROOT_DIR/Phase4_Fusion/fusion.py" --device "$USB_PORT" \
+    > "$ROOT_DIR/Phase5_Operations/fusion_mamba.log" 2>&1 &
 FUSION_PID=$!
 echo "$FUSION_PID" > "$ROOT_DIR/Phase5_Operations/fusion.pid"
 echo "✅ fusion.py PID=$FUSION_PID"
@@ -77,10 +78,8 @@ echo "✅ fusion.py PID=$FUSION_PID"
 # ── Tóm tắt ──────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║  ✅ Toàn bộ hệ thống SITL đã khởi động!          ║"
+echo "║  ✅ Hệ thống Phần cứng (Mamba) đã khởi động!     ║"
 echo "║                                                  ║"
-echo "║  Grafana:    http://localhost:3000               ║"
-echo "║  Xem log:    tail -f Phase5_Operations/fusion.log║"
-echo "║                                                  ║"
-echo "║  * Bạn có thể mở QGroundControl ngay bây giờ!    ║"
+echo "║  Lưu ý: Không dùng QGroundControl ở chế độ này!  ║"
+echo "║  Xem log: tail -f Phase5_Operations/fusion_mamba.log║"
 echo "╚══════════════════════════════════════════════════╝"

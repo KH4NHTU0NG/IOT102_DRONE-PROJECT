@@ -262,6 +262,10 @@ void connectMQTT() {
 
 // --- Setup ---
 void setup() {
+    // Init buzzer immediately to prevent floating loud beep on boot
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(BUZZER_PIN, BUZZER_OFF);
+
     Serial.begin(115200);
     delay(1000);
 
@@ -270,8 +274,6 @@ void setup() {
     Serial.println("==============================");
 
     // Init all GPIO
-    pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, BUZZER_OFF);
 
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LED_OFF);

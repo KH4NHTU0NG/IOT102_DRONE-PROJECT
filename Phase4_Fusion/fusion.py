@@ -618,6 +618,16 @@ def connect_mavlink(max_retries: int = 5) -> mavutil.mavfile:
             conn = mavutil.mavlink_connection(CONNECTION_STRING, baud=BAUDRATE)
             conn.wait_heartbeat(timeout=10)
             print(f"[MAVLINK] ✅ Connected! System ID={conn.target_system}")
+            
+            # [FIX] Yêu cầu Mạch thật (HITL) đẩy luồng dữ liệu (Attitude, GPS) ở tốc độ 10Hz
+            conn.mav.request_data_stream_send(
+                conn.target_system,
+                conn.target_component,
+                mavutil.mavlink.MAV_DATA_STREAM_ALL,
+                10,
+                1
+            )
+            
             return conn
         except Exception as e:
             print(f"[MAVLINK] Attempt {attempt} failed: {e}")
@@ -654,6 +664,7 @@ def mavlink_loop():
             latest_attitude = None
             latest_vfr = None
             latest_sys = None
+            latest_hb = None
             
             with master_lock:
                 if master is not None:
@@ -672,6 +683,8 @@ def mavlink_loop():
                             latest_vfr = msg
                         elif msg_type == 'SYS_STATUS':
                             latest_sys = msg
+                        elif msg_type == 'HEARTBEAT':
+                            latest_hb = msg
 
             global current_mode, current_armed, current_alt, current_spd, current_batt, current_roll
             
@@ -694,10 +707,6 @@ def mavlink_loop():
                     current_roll = latest_attitude.roll
 
             # [FIX] Publish flight status (mode + armed) từ HEARTBEAT
-            latest_hb = None
-            with master_lock:
-                if master is not None:
-                    latest_hb = master.recv_match(type='HEARTBEAT', blocking=False)
             if latest_hb is not None:
                 current_mode = mavutil.mode_string_v10(latest_hb)
                 current_armed = bool(latest_hb.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
