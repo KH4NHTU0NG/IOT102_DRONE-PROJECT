@@ -1509,7 +1509,10 @@
         }
     }
 
-    window.addEventListener('load', init3D);
+    window.addEventListener('load', function() {
+        init3D();
+        initMap(10.8231, 106.6297); // Khởi tạo bản đồ ngay lập tức với tọa độ mặc định (SITL/TP.HCM)
+    });
 </script>
 </body>
 </html>
