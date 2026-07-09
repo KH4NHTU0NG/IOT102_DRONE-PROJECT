@@ -846,6 +846,7 @@
     let scene, camera, renderer, droneGroup;
     let propMeshes = [];
     let propSpeeds = [0, 0, 0, 0];
+    let targetQuaternion = null;
 
     function init3D() {
         const container = document.getElementById('drone3d_container');
@@ -907,6 +908,7 @@
         });
 
         scene.add(droneGroup);
+        targetQuaternion = droneGroup.quaternion.clone();
         animate3D();
     }
 
@@ -915,14 +917,21 @@
         for (let i = 0; i < 4; i++) {
             if (propSpeeds[i] > 0) propMeshes[i].rotation.y += propSpeeds[i] * 0.5;
         }
+        if (droneGroup && targetQuaternion) {
+            droneGroup.quaternion.slerp(targetQuaternion, 0.2); // Smooth interpolation
+        }
         renderer.render(scene, camera);
     }
 
     function updateDrone3D(data) {
         if (!droneGroup) return;
-        droneGroup.rotation.x = -(data.pitch || 0);
-        droneGroup.rotation.z = -(data.roll || 0);
-        droneGroup.rotation.y = -(data.yaw || 0);
+        
+        // Cập nhật góc mục tiêu, animate3D sẽ tự động nội suy (SLERP) mượt mà đến góc này
+        const euler = new THREE.Euler(-(data.pitch || 0), -(data.yaw || 0), -(data.roll || 0), 'YXZ');
+        if (targetQuaternion) {
+            targetQuaternion.setFromEuler(euler);
+        }
+
         document.getElementById('att_r').innerText = ((data.roll || 0) * 180/Math.PI).toFixed(1);
         document.getElementById('att_p').innerText = ((data.pitch || 0) * 180/Math.PI).toFixed(1);
         document.getElementById('att_y').innerText = ((data.yaw || 0) * 180/Math.PI).toFixed(1);
