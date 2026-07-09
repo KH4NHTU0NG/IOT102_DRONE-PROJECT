@@ -47,8 +47,8 @@ if ! docker info &>/dev/null; then
 fi
 cd "$ROOT_DIR/Phase1_Docker"
 docker compose up -d
-echo "✅ Docker: iot_mqtt, iot_db, iot_grafana"
-sleep 10  # Chờ InfluxDB init
+echo "✅ Docker: iot_mqtt, iot_db"
+sleep 5
 
 # ── Bước 2: Kiểm tra BW16 ─────────────────────────────────
 echo ""
@@ -99,12 +99,12 @@ echo ""
 echo "╔══════════════════════════════════════════════════╗"
 echo "║  ✅ Toàn bộ hệ thống đã khởi động!              ║"
 echo "║                                                  ║"
-echo "║  Grafana:    http://localhost:3000               ║"
-echo "║  InfluxDB:   http://localhost:8086               ║"
-echo "║  MQTT:       localhost:1883                      ║"
+echo "║  Web Dashboard: Mở Phase5_Operations/web_control ║"
+echo "║  InfluxDB:      http://localhost:8086            ║"
+echo "║  MQTT:          localhost:1883                   ║"
 echo "║                                                  ║"
-echo "║  BƯỚC TIẾP THEO:                                ║"
-echo "║  1. Mở QGroundControl → tự kết nối UDP 14550    ║"
-echo "║  2. Mở http://localhost:3000 → Grafana           ║"
+echo "║  BƯỚC TIẾP THEO:                                 ║"
+echo "║  1. Mở QGroundControl → tự kết nối UDP 14550     ║"
+echo "║  2. Mở web_control/index.html → Web Dashboard    ║"
 echo "║  3. Xem log: tail -f Phase5_Operations/fusion.log║"
 echo "╚══════════════════════════════════════════════════╝"

@@ -29,18 +29,6 @@ services:
     volumes:
       - influxdb_data:/var/lib/influxdb2   # Bug fix #5: persist DB
 
-  grafana:
-    image: grafana/grafana:10.4.0
-    container_name: iot_grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    depends_on:
-      - influxdb
-    volumes:
-      - grafana_data:/var/lib/grafana       # Bug fix #5: persist dashboards
-
 # Named volumes — data sống sót qua docker-compose restart
 volumes:
   influxdb_data:
-  grafana_data:
