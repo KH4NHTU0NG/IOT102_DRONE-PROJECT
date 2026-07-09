@@ -31,9 +31,9 @@ echo ""
 
 # ── Dọn dẹp tiến trình cũ ─────────────────────────────────
 echo "━━━ Dọn dẹp hệ thống ━━━"
-if pgrep -f "fusion.py" > /dev/null; then
-    echo "  → Đang tắt các tiến trình fusion.py cũ bị kẹt..."
-    pkill -f "fusion.py" || true
+if pgrep -f "main.py" > /dev/null; then
+    echo "  → Đang tắt các tiến trình main.py cũ bị kẹt..."
+    pkill -f "main.py" || true
     sleep 1
 fi
 

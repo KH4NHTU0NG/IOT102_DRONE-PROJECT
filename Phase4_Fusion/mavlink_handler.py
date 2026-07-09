@@ -407,9 +407,6 @@ def mavlink_loop():
                 if latest_sys is not None:
                     config.current_batt = latest_sys.voltage_battery / 1000.0
 
-                if latest_attitude is not None:
-                    config.current_roll = latest_attitude.roll
-
             latest_hb = None
             with config.master_lock:
                 if config.master is not None:
@@ -448,7 +445,6 @@ def mavlink_loop():
                     pass
 
             if latest_attitude is not None and config.mqtt_pub is not None:
-                config.current_roll = latest_attitude.roll
                 attitude_payload = json.dumps({
                     "roll": latest_attitude.roll,
                     "pitch": latest_attitude.pitch,

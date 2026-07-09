@@ -51,7 +51,6 @@ current_alt = 0.0
 current_spd = 0.0
 current_batt = 12.6
 current_wind = 0.0
-current_roll = 0.0
 current_fence_enabled = 0
 is_uploading_mission = False
 
