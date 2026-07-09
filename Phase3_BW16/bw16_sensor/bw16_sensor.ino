@@ -40,7 +40,7 @@ void setup() {
     }
 
     payloadServo.attach(SERVO_PIN);
-    payloadServo.write(0);
+    payloadServo.write(90);
 
     Serial.println("[INIT] GPIO OK");
 
