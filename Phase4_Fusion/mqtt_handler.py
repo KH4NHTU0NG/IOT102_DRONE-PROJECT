@@ -96,6 +96,9 @@ def on_message(client, userdata, msg):
                 pts = data.get("points", [])
                 if pts:
                     threading.Thread(target=mavlink_handler.upload_mission_thread, args=(pts,), daemon=True).start()
+            elif command == "CLEAR_MISSION":
+                threading.Thread(target=mavlink_handler.clear_mission, daemon=True).start()
+                print("[MISSION] 🗑️  Yêu cầu xóa toàn bộ waypoint")
 
         elif topic == config.TOPIC_HEARTBEAT:
             config.last_heartbeat_time = time.time()

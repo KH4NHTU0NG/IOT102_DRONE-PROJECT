@@ -250,6 +250,31 @@ def handle_sim_param(param_id: str, value: float):
         except Exception as e:
             print(f"[SIM_CMD] ❌ Lỗi khi set {param_id}: {e}")
 
+def clear_mission():
+    try:
+        with config.master_lock:
+            if config.master is None:
+                _publish_status("ERROR", "SITL chưa kết nối")
+                return
+        _publish_status("BUSY", "Đang xóa lộ trình cũ...")
+        print(f"[MISSION] Bắt đầu xóa mission...")
+        
+        with config.master_lock:
+            if config.master is None:
+                return
+            config.master.waypoint_clear_all_send()
+            ack = config.master.recv_match(type='MISSION_ACK', blocking=True, timeout=3)
+            
+        if ack and ack.type == 0:
+            print("[MISSION] ✅ Clear Mission thành công!")
+            _publish_status("OK", "Đã xóa lộ trình bay")
+        else:
+            print(f"[MISSION] ❌ Lỗi khi xóa mission: {ack}")
+            _publish_status("ERROR", "Xóa lộ trình thất bại")
+    except Exception as e:
+        print(f"[MISSION] ❌ Ngoại lệ khi clear mission: {e}")
+        _publish_status("ERROR", str(e))
+
 def upload_mission_thread(points):
     with config.master_lock:
         if config.master is None:

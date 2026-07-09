@@ -792,6 +792,13 @@
         const wp_el = document.getElementById('wp_count_display');
         if (wp_el) wp_el.textContent = '0 điểm';
         addLog('[MAP] Đã xóa tất cả waypoints, quỹ đạo màu và điểm ô nhiễm');
+        
+        // Gửi lệnh xóa lên server để xóa trên QGroundControl
+        if (client && isConnected) {
+            const payload = JSON.stringify({ "command": "CLEAR_MISSION" });
+            client.send("iot102_drone/control/mission", payload, 0, false);
+            addLog('[MISSION] Đã gửi lệnh xóa lộ trình lên server');
+        }
     }
 
     function uploadMission() {
