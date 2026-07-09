@@ -161,6 +161,46 @@ def _set_mode_with_retry(mode_name: str, retries: int = 3) -> bool:
     return False
 
 
+def _handle_servo(angle: int):
+    """
+    Điều khiển Servo vật lý bằng MAVLink DO_SET_SERVO.
+    - Channel: 9 (có thể đổi theo kết nối thực tế của servo vào Pixhawk)
+    - Đổi độ (0°–180°) → PWM (1000–2000 µs)
+    [ArduPilot Docs: MAV_CMD_DO_SET_SERVO]
+    """
+    try:
+        with master_lock:
+            if master is None:
+                _publish_status("ERROR", "SITL chưa kết nối")
+                return
+        # Đổi góc 0°–180° sang PWM 1000–2000 µs (linear mapping)
+        angle_clamped = max(0, min(180, int(angle)))
+        pwm_us = int(1000 + (angle_clamped / 180.0) * 1000)
+        servo_channel = 9  # Thay đổi nếu servo cắm vào chân khác trên FC
+        print(f"[SERVO] Góc={angle_clamped}°  →  PWM={pwm_us}µs  (CH{servo_channel})")
+        with master_lock:
+            master.mav.command_long_send(
+                master.target_system,
+                master.target_component,
+                mavutil.mavlink.MAV_CMD_DO_SET_SERVO,  # 183
+                0,          # confirmation
+                float(servo_channel),  # param1: servo instance number
+                float(pwm_us),         # param2: PWM µs
+                0, 0, 0, 0, 0
+            )
+        # Chờ ACK
+        ok = _wait_for_ack(mavutil.mavlink.MAV_CMD_DO_SET_SERVO, timeout=2.0)
+        if ok:
+            print(f"[SERVO] ✅ DO_SET_SERVO ACK nhận được")
+            _publish_status("OK", f"Servo → {angle_clamped}° ({pwm_us}µs)")
+        else:
+            print(f"[SERVO] ⚠️  Không có ACK, lệnh vẫn được gửi")
+            _publish_status("WARN", f"Servo {angle_clamped}° (no ACK)")
+    except Exception as e:
+        print(f"[SERVO] Lỗi: {e}")
+        _publish_status("ERROR", str(e))
+
+
 def _handle_mode(mode_name):
     """Chuyển flight mode với ACK verification."""
     try:
@@ -522,7 +562,20 @@ def on_message(client, userdata, msg):
         elif topic == TOPIC_PAYLOAD_CMD:
             data = json.loads(payload_str)
             command = data.get("command", "?")
-            print(f"[CMD] Payload: {command} (BW16 subscribes directly)")
+            print(f"[CMD] Payload: {command}")
+
+            if command == "SERVO":
+                angle = int(data.get("angle", 0))
+                # Tạm tắt gửi lệnh MAVLink xuống SITL để tránh nhầm lẫn
+                # threading.Thread(target=_handle_servo, args=(angle,), daemon=True).start()
+                print(f"[CMD] SERVO {angle}° → BW16 xử lý trực tiếp")
+            elif command == "BUZZER_ON":
+                # BW16 tự subscribe TOPIC_PAYLOAD_CMD — chỉ log lại
+                print(f"[CMD] BUZZER_ON → BW16 xử lý trực tiếp")
+            elif command == "LED_ON":
+                print(f"[CMD] LED_ON → BW16 xử lý trực tiếp")
+            else:
+                print(f"[CMD] Payload command `{command}` → BW16 xử lý trực tiếp")
 
         elif topic == TOPIC_WEATHER_CMD:
             data = json.loads(payload_str)
@@ -659,13 +712,25 @@ def mavlink_loop():
                 if latest_gps is not None:
                     current_alt = latest_gps.relative_alt / 1000.0
                     gps_data = {
+                        # ── Vị trí ────────────────────────────────────────────────────────────
                         "lat": latest_gps.lat / 1e7,
                         "lon": latest_gps.lon / 1e7,
-                        "alt": current_alt
+                        "alt": latest_gps.alt / 1000.0,          # Absolute MSL (m)
+                        "relative_alt": current_alt,              # Relative to home (m)
+                        # ── Vận tốc & Hướng ──────────────────────────────────────────────
+                        "vx": latest_gps.vx / 100.0,             # m/s (N-E-D)
+                        "vy": latest_gps.vy / 100.0,             # m/s
+                        "vz": latest_gps.vz / 100.0,             # m/s
+                        "hdg": latest_gps.hdg,                   # centi-degrees (0–35999), /100 → deg
+                        # ── Chất lượng GPS (GPS_RAW_INT must be published separately if needed) ─
+                        # Nếu muốn fix_type/sats cần subscribe GPS_RAW_INT
                     }
 
                 if latest_vfr is not None:
                     current_spd = latest_vfr.groundspeed
+                    # Thêm ground_speed vào gps_data để frontend hiển thị tốc độ nếu không có vx/vy
+                    if gps_data:
+                        gps_data["ground_speed"] = round(current_spd, 2)
 
                 if latest_sys is not None:
                     current_batt = latest_sys.voltage_battery / 1000.0
@@ -826,8 +891,8 @@ def main():
                     "spd": float(current_spd),
                     "batt": float(current_batt),
                     "wind": float(current_wind),
-                    "fence": int(fence_status),
-                    "roll": float(current_roll)
+                    "fence": int(fence_status)
+                    # "roll": float(current_roll)  # Tắt auto-roll để BW16 không đè lệnh manual servo
                 })
                 try:
                     if mqtt_client and mqtt_client.is_connected():

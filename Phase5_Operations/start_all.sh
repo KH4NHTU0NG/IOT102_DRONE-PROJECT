@@ -86,12 +86,11 @@ if [ ! -d "$VENV" ]; then
     bash "$ROOT_DIR/Phase4_Fusion/setup_venv.sh"
 fi
 source "$VENV/bin/activate"
-echo "  → Khởi động fusion.py trong nền..."
-nohup python3 "$ROOT_DIR/Phase4_Fusion/fusion.py" \
-    > "$ROOT_DIR/Phase5_Operations/fusion.log" 2>&1 &
+echo "  → Khởi động main.py trong nền..."
+nohup python3 "$ROOT_DIR/Phase4_Fusion/main.py" > "$ROOT_DIR/Phase5_Operations/fusion.log" 2>&1 &
 FUSION_PID=$!
 echo "$FUSION_PID" > "$ROOT_DIR/Phase5_Operations/fusion.pid"
-echo "✅ fusion.py PID=$FUSION_PID"
+echo "✅ main.py PID=$FUSION_PID"
 echo "   Log: $ROOT_DIR/Phase5_Operations/fusion.log"
 echo "   Tail log: tail -f $ROOT_DIR/Phase5_Operations/fusion.log"
 

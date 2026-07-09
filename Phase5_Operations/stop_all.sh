@@ -21,21 +21,21 @@ fi
 echo "━━━ Drone IoT — Dừng toàn bộ hệ thống ━━━"
 echo ""
 
-# Dừng fusion.py
+# Dừng main.py
 PID_FILE="$ROOT_DIR/Phase5_Operations/fusion.pid"
 if [ -f "$PID_FILE" ]; then
     FUSION_PID=$(cat "$PID_FILE")
     if kill -0 "$FUSION_PID" 2>/dev/null; then
         kill "$FUSION_PID"
-        echo "✅ Dừng fusion.py (PID=$FUSION_PID)"
+        echo "✅ Dừng main.py (PID=$FUSION_PID)"
     else
-        echo "  fusion.py không còn chạy."
+        echo "  main.py không còn chạy."
     fi
     rm -f "$PID_FILE"
 else
     # Tìm và kill bằng tên
-    pkill -f "fusion.py" 2>/dev/null && echo "✅ Dừng fusion.py" || \
-        echo "  fusion.py không đang chạy."
+    pkill -f "main.py" 2>/dev/null && echo "✅ Dừng main.py" || \
+        echo "  main.py không đang chạy."
 fi
 
 # Dừng SITL nếu còn
