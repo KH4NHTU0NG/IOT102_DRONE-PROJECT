@@ -83,6 +83,10 @@ unsigned long lastOLEDUpdate = 0;
 const long    interval = 2000;
 const long    oledInterval = 200;
 
+// Non-blocking servo control
+bool          servo_attached = false;
+unsigned long servo_detach_time = 0;
+
 // Sensor globals
 float temp_val = 0.0;
 float hum_val  = 0.0;
@@ -202,12 +206,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
         String angleStr = parseJsonField(msgString, "angle");
         if (angleStr.length() > 0) {
             int angle = constrain(angleStr.toInt(), 0, 180);
-            payloadServo.attach(SERVO_PIN);  // Bật PWM
+            if (!servo_attached) {
+                payloadServo.attach(SERVO_PIN);
+                servo_attached = true;
+            }
             payloadServo.write(angle);
+            servo_detach_time = millis() + 1500; // Cho servo 1.5s quay tới góc (non-blocking)
             Serial.print("[CMD] SERVO ");
             Serial.println(angle);
-            delay(600);                      // Chờ servo quay xong
-            payloadServo.detach();            // Tắt PWM → hết rè rè
         }
     }
 }
@@ -355,8 +361,8 @@ void setup() {
 
     payloadServo.attach(SERVO_PIN);
     payloadServo.write(0);
-    delay(500);
-    payloadServo.detach();  // Tắt PWM → tránh rè rè khi idle
+    servo_attached = true;
+    servo_detach_time = millis() + 1500;
 
     Serial.println("[INIT] GPIO OK");
 
@@ -449,5 +455,12 @@ void loop() {
     if (now - lastOLEDUpdate >= oledInterval) {
         lastOLEDUpdate = now;
         updateOLED(env_alert);
+    }
+
+    // Tự động detach servo sau khi quay xong (non-blocking) để ngắt PWM idle → hết rè rè
+    if (servo_attached && now >= servo_detach_time) {
+        payloadServo.detach();
+        servo_attached = false;
+        Serial.println("[SERVO] Idle detach OK");
     }
 }
