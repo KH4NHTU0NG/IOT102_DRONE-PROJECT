@@ -67,17 +67,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
         String fenceStr = parseJsonField(msgString, "fence");
         if (fenceStr.length() > 0) flight_fence = fenceStr.toInt();
 
-        String rollStr = parseJsonField(msgString, "roll");
-        if (rollStr.length() > 0) {
-            float roll = rollStr.toFloat();
-            // Convert roll (radians) to angle (degrees) and map to servo
-            // Negative roll (left turn) -> Servo looks left (< 90)
-            // Positive roll (right turn) -> Servo looks right (> 90)
-            int angle = 90 + (roll * 180.0 / 3.14159);
-            // Constrain between 45 and 135 degrees to prevent wire tangling
-            angle = constrain(angle, 45, 135);
-            payloadServo.write(angle);
-        }
 
         return; // Terminate callback processing for telemetry packets
     }
