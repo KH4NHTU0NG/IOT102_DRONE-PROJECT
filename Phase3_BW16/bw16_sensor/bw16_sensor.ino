@@ -202,9 +202,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
         String angleStr = parseJsonField(msgString, "angle");
         if (angleStr.length() > 0) {
             int angle = constrain(angleStr.toInt(), 0, 180);
+            payloadServo.attach(SERVO_PIN);  // Bật PWM
             payloadServo.write(angle);
             Serial.print("[CMD] SERVO ");
             Serial.println(angle);
+            delay(600);                      // Chờ servo quay xong
+            payloadServo.detach();            // Tắt PWM → hết rè rè
         }
     }
 }
@@ -352,6 +355,8 @@ void setup() {
 
     payloadServo.attach(SERVO_PIN);
     payloadServo.write(0);
+    delay(500);
+    payloadServo.detach();  // Tắt PWM → tránh rè rè khi idle
 
     Serial.println("[INIT] GPIO OK");
 
