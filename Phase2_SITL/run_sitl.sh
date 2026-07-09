@@ -16,6 +16,12 @@ echo "  Drone IoT — Phase 2 SITL Launcher"
 echo "  Platform: macOS Apple Silicon"
 echo "========================================"
 
+FRAME_FLAG=""
+if [[ "${1:-}" == "--jmavsim" || "${1:-}" == "--3d" || "${1:-}" == "-3d" ]]; then
+    echo "🎮 Chế độ Đồ họa 3D: Đã kích hoạt jMAVSim Simulator (-f jmavsim)"
+    FRAME_FLAG="-f jmavsim"
+fi
+
 # ── Kiểm tra SITL tồn tại ────────────────────────────────
 if [ ! -f "$SITL_BIN" ]; then
     echo "❌ Không tìm thấy sim_vehicle.py."
@@ -62,6 +68,7 @@ echo ""
 
 python3 "$SITL_BIN" \
     -v ArduCopter \
+    $FRAME_FLAG \
     --out=udp:127.0.0.1:14550 \
     --out=tcpin:127.0.0.1:5763 \
     --custom-location=-35.363261,149.165230,584,0 \

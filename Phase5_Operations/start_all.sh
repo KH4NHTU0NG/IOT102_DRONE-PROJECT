@@ -64,8 +64,9 @@ fi
 # ── Bước 3: SITL (mở Terminal mới) ────────────────────────
 echo ""
 echo "━━━ [3/4] Khởi động SITL ━━━"
-echo "  → Mở Terminal MỚI và chạy:"
-echo "     cd ../Phase2_SITL && bash run_sitl.sh"
+echo "  → Mở Terminal MỚI và chạy (chọn 1 trong 2):"
+echo "     • Chuẩn (nhanh):       cd ../Phase2_SITL && bash run_sitl.sh"
+echo "     • Kèm 3D jMAVSim:      cd ../Phase2_SITL && bash run_jmavsim.sh"
 echo ""
 read -r -p "  Chờ SITL hiện 'MAV>' rồi nhấn Enter để tiếp tục..."
 
