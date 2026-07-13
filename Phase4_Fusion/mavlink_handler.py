@@ -191,6 +191,26 @@ def handle_takeoff(alt):
         print(f"[MAVLINK] Lỗi TAKEOFF: {e}")
         _publish_status("ERROR", str(e))
 
+def handle_set_alt(alt):
+    """Thay đổi độ cao khi đang bay (GUIDED mode) — MAV_CMD_GUIDED_CHANGE_ALTITUDE.
+    Ref: ArduPilot docs MAV_CMD_GUIDED_CHANGE_ALTITUDE (command=522)"""
+    try:
+        alt = max(1.0, min(float(alt), 100.0))
+        with config.master_lock:
+            if config.master is None:
+                _publish_status("ERROR", "SITL chưa kết nối")
+                return
+            config.master.mav.command_long_send(
+                config.master.target_system, config.master.target_component,
+                522,  # MAV_CMD_GUIDED_CHANGE_ALTITUDE
+                0, 0, 0, 0, 0, 0, 0, alt
+            )
+        print(f"[MAVLINK] SET_ALT → {alt}m")
+        _publish_status("OK", f"Độ cao mới: {alt}m")
+    except Exception as e:
+        print(f"[MAVLINK] Lỗi SET_ALT: {e}")
+        _publish_status("ERROR", str(e))
+
 def handle_recovery():
     try:
         with config.master_lock:

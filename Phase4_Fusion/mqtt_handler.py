@@ -61,6 +61,10 @@ def on_message(client, userdata, msg):
             elif command == "RECOVERY":
                 threading.Thread(target=mavlink_handler.handle_recovery, daemon=True).start()
                 print("[CMD] Recovery sequence started")
+            elif command == "SET_ALT":
+                # [FIX] Handler SET_ALT bị thiếu — lệnh từ Web bị bỏ qua trước đây
+                threading.Thread(target=mavlink_handler.handle_set_alt, args=(alt,), daemon=True).start()
+                print(f"[CMD] SET_ALT → {alt}m")
 
         elif topic == config.TOPIC_PAYLOAD_CMD:
             data = json.loads(payload_str)

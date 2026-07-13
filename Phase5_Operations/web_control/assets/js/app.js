@@ -255,7 +255,9 @@
                         ? g.hdg / 100
                         : (g.heading ?? null);
 
-                    updateMap(g.lat, g.lon, headingDeg);
+                    // [FIX] Truyền alt để saveAbnormalPoint lưu được độ cao đúng
+                    const altVal = g.relative_alt ?? g.alt ?? null;
+                    updateMap(g.lat, g.lon, headingDeg, altVal);
 
                     // ── QGC Telemetry Panel Update ──────────────────────────
                     const setQt = (id, val, decimals = 1, warnLow, warnHigh) => {
@@ -776,19 +778,25 @@
         const headers = ['#','Thoi_gian','Lat','Lon','Alt_m','Temp_C','CO2_ADC','Muc_do'];
         const rows = abnormalPoints.map(p => [p.idx, p.time, p.lat, p.lon, p.alt, p.temp, p.co2, p.severity].join(','));
         const csv = [headers.join(','), ...rows].join('\n');
+        const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], {type: 'text/csv;charset=utf-8'}));
         const a = document.createElement('a');
-        a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+        a.href = url;
         a.download = `abnormal_points_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
         a.click();
+        // [FIX] Giải phóng Object URL ngay sau khi click — tránh memory leak
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         addLog(`[ENV] Đã xuất ${abnormalPoints.length} tọa độ ra CSV`);
     }
 
     function exportAbnormalJSON() {
         if (abnormalPoints.length === 0) { addLog('[ENV] Không có dữ liệu để xuất'); return; }
+        const url = URL.createObjectURL(new Blob([JSON.stringify(abnormalPoints, null, 2)], {type: 'application/json'}));
         const a = document.createElement('a');
-        a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(abnormalPoints, null, 2));
+        a.href = url;
         a.download = `abnormal_points_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
         a.click();
+        // [FIX] Giải phóng Object URL ngay sau khi click — tránh memory leak
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         addLog(`[ENV] Đã xuất ${abnormalPoints.length} tọa độ ra JSON`);
     }
 
