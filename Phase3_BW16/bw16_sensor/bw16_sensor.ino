@@ -155,8 +155,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
     // ── Route theo topic ──────────────────────────────────────
     String topicStr(topic);
 
-    // 1. Telemetry downstream từ Fusion (topic riêng, không lẫn với command)
-    if (topicStr == String(topic_telem_dn)) {
+    // Helper: xử lý telemetry (dùng cho cả 2 topic)
+    auto handleTelemetry = [&]() {
         String modeStr = parseJsonField(msgString, "mode");
         if (modeStr.length() > 0) {
             flight_mode = modeStr;
@@ -174,12 +174,26 @@ void callback(char* topic, byte* payload, unsigned int length) {
         if (windStr.length() > 0) flight_wind = windStr.toFloat();
         String fenceStr= parseJsonField(msgString, "fence");
         if (fenceStr.length()> 0) flight_fence= fenceStr.toInt();
-        return;  // done, không xử lý command
+    };
+
+    // 1. Topic telemetry mới (Fusion bridge đã restart)
+    if (topicStr == String(topic_telem_dn)) {
+        handleTelemetry();
+        return;
     }
 
-    // 2. Command từ Web Dashboard (topic_payload)
+    // 2. Topic payload — kiểm tra có phải telemetry cũ không
+    //    (Fusion chưa restart → vẫn publish "mode" lên topic_payload)
     String command = parseJsonField(msgString, "command");
+    String modeCheck = parseJsonField(msgString, "mode");
 
+    if (command.length() == 0 && modeCheck.length() > 0) {
+        // Đây là telemetry cũ từ Fusion (chưa restart)
+        handleTelemetry();
+        return;
+    }
+
+    // 3. Command từ Web Dashboard
     if (command == "BUZZER_ON") {
         mqtt_buzzer_override = true;
         mqtt_buzzer_state    = true;
@@ -214,7 +228,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
             int angle = constrain(angleStr.toInt(), 0, 180);
             servo_pending_angle = angle;
             // [DEBUG] Nháy LED đỏ 2 lần — xác nhận BW16 đã nhận lệnh SERVO
-            // (dùng thay Serial Monitor khi không cắm USB)
             for (int i = 0; i < 2; i++) {
                 digitalWrite(LED_PIN, LED_ON);
                 delay(100);
