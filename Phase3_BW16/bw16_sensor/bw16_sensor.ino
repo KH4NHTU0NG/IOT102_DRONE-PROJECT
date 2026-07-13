@@ -244,13 +244,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
         if (angleStr.length() > 0) {
             int angle = constrain(angleStr.toInt(), 0, 180);
             servo_pending_angle = angle;
-            // [DEBUG] Nháy LED đỏ 2 lần — xác nhận BW16 đã nhận lệnh SERVO
-            for (int i = 0; i < 2; i++) {
-                digitalWrite(LED_PIN, LED_ON);
-                delay(100);
-                digitalWrite(LED_PIN, LED_OFF);
-                delay(100);
-            }
         }
     }
 }
@@ -532,10 +525,6 @@ void loop() {
         pwmout_pulsewidth_us(&servo_pwm, pulse_us);
 
         Serial.print("[SERVO] HW-PWM ");
-        Serial.print(angle);
-        Serial.print(" deg (");
-        Serial.print(pulse_us);
-        Serial.println(" us)");
     }
 
     // [FIX] Cập nhật RSSI riêng mỗi 5s để không block PWM servo
