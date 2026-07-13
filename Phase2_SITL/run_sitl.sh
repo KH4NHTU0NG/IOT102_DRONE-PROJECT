@@ -18,8 +18,7 @@ echo "========================================"
 
 FRAME_FLAG=""
 if [[ "${1:-}" == "--jmavsim" || "${1:-}" == "--3d" || "${1:-}" == "-3d" ]]; then
-    echo "🎮 Chế độ Đồ họa 3D: Đã kích hoạt jMAVSim Simulator (-f jmavsim)"
-    FRAME_FLAG="-f jmavsim"
+    echo "🎮 Chế độ Đồ họa 3D: Khởi động ArduCopter SITL Quadcopter chuẩn..."
 fi
 
 # ── Kiểm tra SITL tồn tại ────────────────────────────────
