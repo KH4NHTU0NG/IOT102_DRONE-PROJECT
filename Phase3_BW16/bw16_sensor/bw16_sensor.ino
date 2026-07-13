@@ -94,6 +94,11 @@ int   mq_raw_val = 0;
 float sonar_dist = 0.0;
 bool  env_alert = false;
 
+// [FIX] Cache RSSI để tránh WiFi.RSSI() block 50ms mỗi 200ms → phá PWM servo
+int   cached_rssi = 0;
+unsigned long lastRssiUpdate = 0;
+const long    rssiInterval = 5000;  // Cập nhật RSSI mỗi 5 giây
+
 // ============================================================
 //  JSON Parser
 // ============================================================
@@ -336,12 +341,12 @@ void updateOLED(bool env_alert) {
     display.print(flight_spd, 0);
     display.print("m/s");
 
-    // Dòng 5 (y=56): Fence + WiFi RSSI indicator
+    // Dòng 5 (y=56): Fence + WiFi RSSI (dùng cached, không gọi WiFi.RSSI() trực tiếp)
     display.setCursor(0, 56);
     display.print(flight_fence == 2 ? "!FENCE!" :
                   flight_fence == 1 ? "FenceOK" : "Fence-");
     display.print(" R:");
-    display.print(WiFi.RSSI());
+    display.print(cached_rssi);
 
     display.display();
 }
@@ -485,6 +490,14 @@ void loop() {
     if (now - lastOLEDUpdate >= oledInterval) {
         lastOLEDUpdate = now;
         updateOLED(env_alert);
+    }
+
+    // [FIX] Cập nhật RSSI riêng mỗi 5s để không block PWM servo
+    if (now - lastRssiUpdate >= rssiInterval) {
+        lastRssiUpdate = now;
+        if (WiFi.status() == WL_CONNECTED) {
+            cached_rssi = (int)WiFi.RSSI();
+        }
     }
 
     // Tự động detach servo sau khi quay xong (non-blocking) để ngắt PWM idle → hết rè rè
