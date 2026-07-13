@@ -208,10 +208,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
             int angle = constrain(angleStr.toInt(), 0, 180);
             if (!servo_attached) {
                 payloadServo.attach(SERVO_PIN);
+                delay(30);          // Cho PWM ổn định trước khi write
                 servo_attached = true;
             }
             payloadServo.write(angle);
-            servo_detach_time = millis() + 1500; // Cho servo 1.5s quay tới góc (non-blocking)
+            servo_detach_time = millis() + 2000; // 2s đủ servo quay tới góc mục tiêu
             Serial.print("[CMD] SERVO ");
             Serial.println(angle);
         }
@@ -360,9 +361,10 @@ void setup() {
     }
 
     payloadServo.attach(SERVO_PIN);
-    payloadServo.write(0);
+    delay(30);                    // Cho PWM ổn định trước khi write
+    payloadServo.write(90);       // Vị trí trung lập, tránh servo bị căng khi khởi động
     servo_attached = true;
-    servo_detach_time = millis() + 1500;
+    servo_detach_time = millis() + 2000;  // 2s đủ servo đi tới bất kỳ góc nào (0→180)
 
     Serial.println("[INIT] GPIO OK");
 
