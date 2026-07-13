@@ -707,7 +707,92 @@
         }
     }
 
-    function updateMap(lat, lon, headingDeg) {
+    function clearHeatmap() {
+        if (!mapInitialized) return;
+        heatData = [];
+        if (heatLayer) {
+            heatLayer.setLatLngs([]);
+            if (!isHeatmapActive) {
+                map.removeLayer(heatLayer);
+                heatLayer = null;
+            }
+        }
+        addLog('[MAP] Đã xóa sạch dữ liệu Heatmap (giữ các waypoint và quỹ đạo)');
+    }
+
+    // === ABNORMAL POINTS LIST ===
+    let abnormalPoints = [];
+
+    function saveAbnormalPoint(lat, lon, alt, severity) {
+        const now = new Date();
+        const time = now.toLocaleTimeString('vi-VN', {hour12: false}) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+        const point = {
+            idx: abnormalPoints.length + 1,
+            time,
+            lat: lat.toFixed(6),
+            lon: lon.toFixed(6),
+            alt: (alt !== null && alt !== undefined) ? parseFloat(alt).toFixed(1) : '--',
+            temp: latestTemp !== null ? latestTemp : '--',
+            co2:  latestCo2  !== null ? latestCo2  : '--',
+            severity  // 'DANGER' | 'WARNING'
+        };
+        abnormalPoints.push(point);
+        // Update badge count
+        const badge = document.getElementById('abnormal_count_badge');
+        if (badge) badge.textContent = abnormalPoints.length;
+        // Append row to table
+        const tbody = document.getElementById('abnormal_tbody');
+        if (tbody) {
+            if (abnormalPoints.length === 1) tbody.innerHTML = '';
+            const color = severity === 'DANGER' ? '#dc2626' : '#f59e0b';
+            const row = document.createElement('tr');
+            row.style.cssText = 'border-top:1px solid var(--border);';
+            row.innerHTML = `
+                <td style="padding:3px 8px;color:${color};font-weight:700;">${point.idx}</td>
+                <td style="padding:3px 8px;color:var(--text-2);">${point.time}</td>
+                <td style="padding:3px 8px;color:var(--text-1);">${point.lat}</td>
+                <td style="padding:3px 8px;color:var(--text-1);">${point.lon}</td>
+                <td style="padding:3px 8px;color:var(--cyan);">${point.alt}</td>
+                <td style="padding:3px 8px;color:#fb923c;">${point.temp}</td>
+                <td style="padding:3px 8px;color:#fbbf24;">${point.co2}</td>
+                <td style="padding:3px 8px;font-weight:700;color:${color};">${severity}</td>`;
+            tbody.appendChild(row);
+            // auto-scroll to newest
+            tbody.parentElement.scrollTop = tbody.parentElement.scrollHeight;
+        }
+    }
+
+    function clearAbnormalList() {
+        abnormalPoints = [];
+        const badge = document.getElementById('abnormal_count_badge');
+        if (badge) badge.textContent = '0';
+        const tbody = document.getElementById('abnormal_tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:8px;text-align:center;color:var(--text-3);">Chưa có dữ liệu bất thường</td></tr>';
+        addLog('[ENV] Đã xóa danh sách tọa độ bất thường');
+    }
+
+    function exportAbnormalCSV() {
+        if (abnormalPoints.length === 0) { addLog('[ENV] Không có dữ liệu để xuất'); return; }
+        const headers = ['#','Thoi_gian','Lat','Lon','Alt_m','Temp_C','CO2_ADC','Muc_do'];
+        const rows = abnormalPoints.map(p => [p.idx, p.time, p.lat, p.lon, p.alt, p.temp, p.co2, p.severity].join(','));
+        const csv = [headers.join(','), ...rows].join('\n');
+        const a = document.createElement('a');
+        a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+        a.download = `abnormal_points_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
+        a.click();
+        addLog(`[ENV] Đã xuất ${abnormalPoints.length} tọa độ ra CSV`);
+    }
+
+    function exportAbnormalJSON() {
+        if (abnormalPoints.length === 0) { addLog('[ENV] Không có dữ liệu để xuất'); return; }
+        const a = document.createElement('a');
+        a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(abnormalPoints, null, 2));
+        a.download = `abnormal_points_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+        a.click();
+        addLog(`[ENV] Đã xuất ${abnormalPoints.length} tọa độ ra JSON`);
+    }
+
+    function updateMap(lat, lon, headingDeg, alt) {
         if (!mapInitialized) {
             initMap(lat, lon);
             return;
@@ -763,28 +848,31 @@
                 map.removeLayer(old);
             }
 
-            // Nếu có cảnh báo Alert = 1 → Thả icon  tại tọa độ hiện tại
-            if (latestAlert === 1) {
+            // Nếu có cảnh báo Alert = 1 → Thả icon tại tọa độ hiện tại và lưu vào bảng
+            const isAbnormal = latestAlert === 1 || (latestTemp !== null && latestTemp >= 35) || (latestCo2 !== null && !isNaN(latestCo2) && latestCo2 >= 400);
+            if (isAbnormal) {
+                const severity = (latestAlert === 1 || (latestTemp !== null && latestTemp >= 45) || (latestCo2 !== null && latestCo2 >= 700)) ? 'DANGER' : 'WARNING';
                 const lastPMarker = pollutionMarkers[pollutionMarkers.length - 1];
-                // Tránh thêm icon trùng lặp quá gần nhau (cách nhau ít nhất 0.0001 độ)
                 const tooClose = lastPMarker &&
                     Math.abs(lastPMarker.getLatLng().lat - lat) < 0.0001 &&
                     Math.abs(lastPMarker.getLatLng().lng - lon) < 0.0001;
 
                 if (!tooClose) {
+                    const iconColor = severity === 'DANGER' ? '#dc2626' : '#f59e0b';
                     const pIcon = L.divIcon({
-                        html: '<div style="font-size:18px;filter:drop-shadow(0 0 4px #dc2626);">⚠️</div>',
+                        html: `<div style="font-size:18px;filter:drop-shadow(0 0 4px ${iconColor});">${severity === 'DANGER' ? '⚠️' : '🟡'}</div>`,
                         className: '', iconSize: [22, 22], iconAnchor: [11, 11]
                     });
                     const pMarker = L.marker([lat, lon], { icon: pIcon })
                         .addTo(map)
-                        .bindTooltip(` Khí độc phát hiện!\nTemp: ${latestTemp}°C | CO2: ${latestCo2}`, {
+                        .bindTooltip(`${severity}\nTemp: ${latestTemp}°C | CO2: ${latestCo2}`, {
                             permanent: false, direction: 'top'
                         });
                     pollutionMarkers.push(pMarker);
-                    addLog(`[ENV]  Điểm ô nhiễm được ghi nhận tại (${lat.toFixed(5)}, ${lon.toFixed(5)})`);
-                    
-                    // Giữ tối đa 300 điểm cảnh báo để không lag
+                    // Lưu vào bảng dữ liệu bất thường
+                    saveAbnormalPoint(lat, lon, alt, severity);
+                    addLog(`[ENV] ${severity}: Tọa độ bất thường (${lat.toFixed(5)}, ${lon.toFixed(5)}) đã lưu`);
+
                     if (pollutionMarkers.length > 300) {
                         const old = pollutionMarkers.shift();
                         map.removeLayer(old);

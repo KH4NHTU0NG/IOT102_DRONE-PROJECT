@@ -155,6 +155,7 @@
             <div id="map"></div>
             <div class="map-overlay-controls">
                 <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" id="btnHeatmap" onclick="toggleHeatmap()">Bật Heatmap</button>
+                <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" onclick="clearHeatmap()" title="Xoá sạch dữ liệu nhiệt độ khỏi bản đồ">🗑 Clear Heatmap</button>
                 <button class="btn btn-secondary" style="backdrop-filter:blur(6px);background:rgba(8,12,16,.82);" onclick="clearMap()">Clear Map</button>
                 <button class="btn btn-primary" style="backdrop-filter:blur(6px);" onclick="uploadMission()">Upload Mission</button>
             </div>
@@ -241,6 +242,40 @@
                     <span class="chart-latest" id="chart_rssi_latest" style="color:#a78bfa">--</span>
                 </div>
                 <div class="chart-body"><canvas id="chart_rssi"></canvas><div class="chart-no-data" id="no_data_rssi">Waiting...</div></div>
+            </div>
+        </div>
+
+        <!-- ===  BẢNG TỌA ĐỘ BẤT THƯỜNG === -->
+        <div style="margin:0 0 6px 0;background:var(--bg-1);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:11px;font-weight:700;color:var(--text-1);letter-spacing:.05em;">⚠ ĐIỂM MÔI TRƯỜNG BẤT THƯỜNG</span>
+                    <span id="abnormal_count_badge" style="background:#dc2626;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;">0</span>
+                </div>
+                <div style="display:flex;gap:5px;">
+                    <button class="btn btn-ghost" onclick="exportAbnormalCSV()" title="Xuất CSV" style="font-size:10px;padding:2px 8px;">⬇ CSV</button>
+                    <button class="btn btn-ghost" onclick="exportAbnormalJSON()" title="Xuất JSON" style="font-size:10px;padding:2px 8px;">⬇ JSON</button>
+                    <button class="btn btn-ghost" onclick="clearAbnormalList()" title="Xoá danh sách" style="font-size:10px;padding:2px 8px;color:#dc2626;">🗑 Xoá</button>
+                </div>
+            </div>
+            <div style="max-height:120px;overflow-y:auto;">
+                <table id="abnormal_table" style="width:100%;border-collapse:collapse;font-size:10px;font-family:'JetBrains Mono',monospace;">
+                    <thead>
+                        <tr style="position:sticky;top:0;background:var(--bg-2);">
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">#</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Thời gian</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Lat</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Lon</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Alt(m)</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Temp°C</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">CO2 ADC</th>
+                            <th style="padding:4px 8px;text-align:left;color:var(--text-3);font-weight:600;">Mức độ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="abnormal_tbody">
+                        <tr><td colspan="8" style="padding:8px;text-align:center;color:var(--text-3);">Chưa có dữ liệu bất thường</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
