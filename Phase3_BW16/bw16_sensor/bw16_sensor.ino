@@ -16,8 +16,8 @@ const char* password    = SECRET_PASS;
 const char* mqtt_server = "broker.hivemq.com";
 const char* topic_sensors  = "iot102_drone/payload/sensors";
 const char* topic_payload  = "iot102_drone/control/payload";
-// [FIX] Topic riêng cho telemetry xuống từ Fusion, tách khỏi lệnh command
-const char* topic_telem_dn = "iot102_drone/telemetry/downstream";
+// [FIX] Topic siêu ngắn để tránh MQTT buffer 128 bytes overflow
+const char* topic_telem_dn = "iot102/dn";
 const int   mqtt_port   = 1883;
 
 // --- Pin Definitions ---
@@ -157,22 +157,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     // Helper: xử lý telemetry (dùng cho cả 2 topic)
     auto handleTelemetry = [&]() {
-        String modeStr = parseJsonField(msgString, "mode");
+        String modeStr = parseJsonField(msgString, "md");
+        if (modeStr.length() == 0) modeStr = parseJsonField(msgString, "mode"); // fallback
         if (modeStr.length() > 0) {
             flight_mode = modeStr;
             lastTelemetryTime = millis();
         }
-        String armedStr = parseJsonField(msgString, "armed");
+        String armedStr = parseJsonField(msgString, "ar");
+        if (armedStr.length() == 0) armedStr = parseJsonField(msgString, "armed");
         drone_armed = (armedStr == "1" || armedStr == "true");
-        String altStr  = parseJsonField(msgString, "alt");
+
+        String altStr  = parseJsonField(msgString, "al");
+        if (altStr.length() == 0) altStr = parseJsonField(msgString, "alt");
         if (altStr.length()  > 0) flight_alt  = altStr.toFloat();
-        String spdStr  = parseJsonField(msgString, "spd");
+
+        String spdStr  = parseJsonField(msgString, "sp");
+        if (spdStr.length() == 0) spdStr = parseJsonField(msgString, "spd");
         if (spdStr.length()  > 0) flight_spd  = spdStr.toFloat();
-        String battStr = parseJsonField(msgString, "batt");
+
+        String battStr = parseJsonField(msgString, "bt");
+        if (battStr.length() == 0) battStr = parseJsonField(msgString, "batt");
         if (battStr.length() > 0) flight_batt = battStr.toFloat();
-        String windStr = parseJsonField(msgString, "wind");
+
+        String windStr = parseJsonField(msgString, "wi");
+        if (windStr.length() == 0) windStr = parseJsonField(msgString, "wind");
         if (windStr.length() > 0) flight_wind = windStr.toFloat();
-        String fenceStr= parseJsonField(msgString, "fence");
+
+        String fenceStr= parseJsonField(msgString, "fc");
+        if (fenceStr.length() == 0) fenceStr = parseJsonField(msgString, "fence");
         if (fenceStr.length()> 0) flight_fence= fenceStr.toInt();
     };
 
@@ -417,10 +429,6 @@ void setup() {
     wifiClient.setBlockingMode();
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
-    // [FIX] Tăng buffer MQTT lên 512 bytes vì payload telemetry + topic string vượt quá 128 bytes mặc định
-    if (!client.setBufferSize(512)) {
-        Serial.println("[MQTT] Khong the setBufferSize, dung thu vien cu?");
-    }
     client.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
 
     // [FIX] Khởi tạo Servo: attach 1 lần duy nhất giống servo_test.ino, không detach nữa

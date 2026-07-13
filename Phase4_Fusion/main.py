@@ -77,13 +77,13 @@ def main():
                     fence_status = 2 if dist_to_home > 50.0 else 1
 
                 telemetry_payload = json.dumps({
-                    "mode": config.current_mode,
-                    "armed": 1 if config.current_armed else 0,
-                    "alt": float(config.current_alt),
-                    "spd": float(config.current_spd),
-                    "batt": float(config.current_batt),
-                    "wind": float(config.current_wind),
-                    "fence": int(fence_status)
+                    "md": config.current_mode,
+                    "ar": 1 if config.current_armed else 0,
+                    "al": round(float(config.current_alt), 1),
+                    "sp": round(float(config.current_spd), 1),
+                    "bt": round(float(config.current_batt), 1),
+                    "wi": round(float(config.current_wind), 1),
+                    "fc": int(fence_status)
                 })
                 
                 try:
