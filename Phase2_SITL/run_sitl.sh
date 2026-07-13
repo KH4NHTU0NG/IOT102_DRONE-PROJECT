@@ -19,7 +19,7 @@ echo "========================================"
 FRAME_FLAG=""
 if [[ "${1:-}" == "--jmavsim" || "${1:-}" == "--3d" || "${1:-}" == "-3d" ]]; then
     echo "🎮 Chế độ Đồ họa 3D: Khởi động ArduCopter SITL + truyền MAVLink đến jMAVSim (port 14560)..."
-    FRAME_FLAG="--out=udp:127.0.0.1:14560"
+    FRAME_FLAG="--out=127.0.0.1:14560"
 fi
 
 # ── Kiểm tra SITL tồn tại ────────────────────────────────
@@ -70,6 +70,7 @@ python3 "$SITL_BIN" \
     -v ArduCopter \
     $FRAME_FLAG \
     --out=udp:127.0.0.1:14550 \
+    --out=udp:127.0.0.1:14560 \
     --out=tcpin:127.0.0.1:5763 \
     --custom-location=-35.363261,149.165230,584,0 \
     --speedup 1 \
