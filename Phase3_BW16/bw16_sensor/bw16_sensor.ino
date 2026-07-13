@@ -4,7 +4,10 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
-#include <AmebaServo.h>
+// [FIX] Dùng Hardware PWM thay AmebaServo vì WiFi stack phá software PWM
+extern "C" {
+#include "pwmout_api.h"
+}
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -33,6 +36,10 @@ const int   mqtt_port   = 1883;
 #define LED_GREEN_PIN   PA27
 
 #define SERVO_PIN       PA13
+#define SERVO_PIN_HW    PA_13   // Hardware PWM pin name
+#define SERVO_PERIOD_US 20000   // 50Hz
+#define SERVO_MIN_US    544     // 0 dộ
+#define SERVO_MAX_US    2400    // 180 dộ
 
 // --- OLED Config ---
 #define SCREEN_WIDTH 128
@@ -78,18 +85,16 @@ unsigned long lastTelemetryTime = 0;
 WiFiClient   wifiClient;
 PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT_TYPE);
-AmebaServo   payloadServo;
+// [FIX] Hardware PWM servo — không bị WiFi interrupt phá
+pwmout_t     servo_pwm;
 
 unsigned long lastMsg = 0;
 unsigned long lastOLEDUpdate = 0;
 const long    interval = 2000;
 const long    oledInterval = 200;
 
-// Non-blocking servo control
-bool          servo_attached    = false;
-unsigned long servo_detach_time = 0;
-// [FIX] Pending angle: callback chỉ ghi flag, loop() thực thi — tránh delay() trong callback
-int           servo_pending_angle = -1;  // -1 = không có lệnh mới
+// Servo pending (callback chỉ lưu, loop() thực thi)
+int           servo_pending_angle = -1;
 
 // Sensor globals
 float temp_val = 0.0;
@@ -413,13 +418,11 @@ void setup() {
         display.display();
     }
 
-    payloadServo.attach(SERVO_PIN);
-    delay(30);                    // Cho PWM ổn định trước khi write
-    payloadServo.write(90);       // Vị trí trung lập, tránh servo bị căng khi khởi động
-    servo_attached = true;
-    servo_detach_time = millis() + 2000;  // 2s đủ servo đi tới bất kỳ góc nào (0→180)
-
-    Serial.println("[INIT] GPIO OK");
+    // [FIX] Hardware PWM servo init — chống WiFi interrupt
+    pwmout_init(&servo_pwm, SERVO_PIN_HW);
+    pwmout_period_us(&servo_pwm, SERVO_PERIOD_US);
+    pwmout_pulsewidth_us(&servo_pwm, 1500); // 90 dộ (trung lập)
+    Serial.println("[INIT] HW-PWM Servo OK");
 
     dht.begin();
     delay(500);
@@ -430,11 +433,6 @@ void setup() {
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
     client.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
-
-    // [FIX] Khởi tạo Servo: attach 1 lần duy nhất giống servo_test.ino, không detach nữa
-    payloadServo.attach(SERVO_PIN);
-    servo_attached = true;
-    payloadServo.write(0);
 
     Serial.println("[INIT] Setup complete!");
 }
@@ -523,26 +521,21 @@ void loop() {
         updateOLED(env_alert);
     }
 
-    // [FIX] Xử lý lệnh servo từ loop() — an toàn, không block MQTT callback
+    // [FIX] Xử lý lệnh servo từ loop() — Hardware PWM, không bị WiFi phá
     if (servo_pending_angle >= 0) {
         int angle = servo_pending_angle;
-        servo_pending_angle = -1;   // xóa flag người dùng
-        
-        // Không gọi attach() ở đây nữa vì đã attach trong setup()
-        payloadServo.write(angle);
-        
-        Serial.print("[SERVO] write ");
-        Serial.println(angle);
-        // [DEBUG] Hiển thị góc trên OLED vùng vàng để xác nhận loop() đã thực thi
-        display.clearDisplay();
-        display.setTextColor(SSD1306_WHITE);
-        display.setTextSize(1);
-        display.setCursor(0, 3);
-        display.print("SERVO -> ");
-        display.print(angle);
-        display.print(" deg");
-        display.display();
-        delay(600);  // Giữ hiển thị 0.6s rồi resume OLED bình thường
+        servo_pending_angle = -1;
+
+        // Hardware PWM: tính pulse width theo góc
+        angle = constrain(angle, 0, 180);
+        int pulse_us = SERVO_MIN_US + (long)(angle) * (SERVO_MAX_US - SERVO_MIN_US) / 180;
+        pwmout_pulsewidth_us(&servo_pwm, pulse_us);
+
+        Serial.print("[SERVO] HW-PWM ");
+        Serial.print(angle);
+        Serial.print(" deg (");
+        Serial.print(pulse_us);
+        Serial.println(" us)");
     }
 
     // [FIX] Cập nhật RSSI riêng mỗi 5s để không block PWM servo
@@ -552,5 +545,4 @@ void loop() {
             cached_rssi = (int)WiFi.RSSI();
         }
     }
-    // [FIX] Xóa logic detach servo, giữ servo luôn active giống servo_test.ino
 }
