@@ -199,18 +199,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
         return;
     }
 
-    // 2. Topic payload — kiểm tra có phải telemetry cũ không
-    //    (Fusion chưa restart → vẫn publish "mode" lên topic_payload)
+    // 2. Command từ Web Dashboard (trên topic_payload)
     String command = parseJsonField(msgString, "command");
-    String modeCheck = parseJsonField(msgString, "mode");
 
-    if (command.length() == 0 && modeCheck.length() > 0) {
-        // Đây là telemetry cũ từ Fusion (chưa restart)
-        handleTelemetry();
-        return;
-    }
-
-    // 3. Command từ Web Dashboard
     if (command == "BUZZER_ON") {
         mqtt_buzzer_override = true;
         mqtt_buzzer_state    = true;
