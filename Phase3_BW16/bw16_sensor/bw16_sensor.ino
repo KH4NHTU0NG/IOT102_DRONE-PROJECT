@@ -86,8 +86,10 @@ const long    interval = 2000;
 const long    oledInterval = 200;
 
 // Non-blocking servo control
-bool          servo_attached = false;
+bool          servo_attached    = false;
 unsigned long servo_detach_time = 0;
+// [FIX] Pending angle: callback chỉ ghi flag, loop() thực thi — tránh delay() trong callback
+int           servo_pending_angle = -1;  // -1 = không có lệnh mới
 
 // Sensor globals
 float temp_val = 0.0;
@@ -210,16 +212,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
         String angleStr = parseJsonField(msgString, "angle");
         if (angleStr.length() > 0) {
             int angle = constrain(angleStr.toInt(), 0, 180);
-            if (!servo_attached) {
-                payloadServo.attach(SERVO_PIN);
-                delay(30);          // Cho PWM ổn định trước khi write
-                servo_attached = true;
-            }
-            payloadServo.write(angle);
-            yield();  // [FIX] Nhường CPU, giúp PWM timer xử lý ngắt đúng thời điểm
-            servo_detach_time = millis() + 2000;
-            Serial.print("[CMD] SERVO ");
-            Serial.println(angle);
+            // [FIX] Không attach/write trong callback — delay() trong callback phá PubSubClient
+            // Chỉ lưu góc vào pending, loop() sẽ thực thi
+            servo_pending_angle = angle;
         }
     }
 }
@@ -492,6 +487,21 @@ void loop() {
         updateOLED(env_alert);
     }
 
+    // [FIX] Xử lý lệnh servo từ loop() — an toàn, không block MQTT callback
+    if (servo_pending_angle >= 0) {
+        int angle = servo_pending_angle;
+        servo_pending_angle = -1;   // xóa flag người dùng
+        if (!servo_attached) {
+            payloadServo.attach(SERVO_PIN);
+            delay(30);              // An toàn khi gọi từ loop()
+            servo_attached = true;
+        }
+        payloadServo.write(angle);
+        servo_detach_time = millis() + 2000;
+        Serial.print("[SERVO] write ");
+        Serial.println(angle);
+    }
+
     // [FIX] Cập nhật RSSI riêng mỗi 5s để không block PWM servo
     if (now - lastRssiUpdate >= rssiInterval) {
         lastRssiUpdate = now;
@@ -504,6 +514,5 @@ void loop() {
     if (servo_attached && now >= servo_detach_time) {
         payloadServo.detach();
         servo_attached = false;
-        Serial.println("[SERVO] Idle detach OK");
     }
 }
