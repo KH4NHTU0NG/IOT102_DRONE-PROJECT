@@ -36,4 +36,4 @@ else
 fi
 
 # Khởi chạy ArduCopter SITL
-bash "$SCRIPT_DIR/run_sitl.sh"
+bash "$SCRIPT_DIR/run_sitl.sh" --jmavsim
