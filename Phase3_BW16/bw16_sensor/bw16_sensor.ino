@@ -275,52 +275,73 @@ void connectMQTT() {
 // ============================================================
 void updateOLED(bool env_alert) {
     display.clearDisplay();
-    display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
-    // Dòng 1: Flight Mode + Armed
-    display.setCursor(0, 0);
+    // ═══════════════════════════════════════════════════
+    // VÙNG VÀNG (y = 0–15): Tiêu đề + Trạng thái alert
+    // ═══════════════════════════════════════════════════
+    display.setTextSize(1);
+    display.setCursor(0, 3);  // Căn giữa dọc vùng vàng
+    if (env_alert) {
+        display.print("** CANH BAO O NHIEM **");
+    } else {
+        display.print("DroneIoT ");
+        display.print(drone_armed ? "[ARMED]" : "[DISARM]");
+    }
+
+    // ═══════════════════════════════════════════════════
+    // VÙNG XANH (y = 16–63): Toàn bộ thông số cảm biến
+    // ═══════════════════════════════════════════════════
+
+    // Dòng 1 (y=16): Mode + Altitude
+    display.setCursor(0, 16);
     display.print(flight_mode);
-    display.print(drone_armed ? " [ARMED]" : " [DISARM]");
-
-    // Dòng 2: Altitude + Speed
-    display.setCursor(0, 12);
-    display.print("Alt:");
+    display.print(" Alt:");
     display.print(flight_alt, 1);
-    display.print("m Spd:");
-    display.print(flight_spd, 1);
+    display.print("m");
 
-    // Dòng 3: Battery + Wind
-    display.setCursor(0, 24);
+    // Dòng 2 (y=26): Nhiệt độ + Độ ẩm
+    display.setCursor(0, 26);
+    display.print("T:");
+    if (temp_val == 0.0 && hum_val == 0.0) {
+        display.print("--");
+    } else {
+        display.print(temp_val, 1);
+    }
+    display.print("C H:");
+    if (hum_val == 0.0 && temp_val == 0.0) {
+        display.print("--");
+    } else {
+        display.print(hum_val, 0);
+    }
+    display.print("%");
+
+    // Dòng 3 (y=36): CO2 + Sonar
+    display.setCursor(0, 36);
+    display.print("CO2:");
+    display.print(mq_raw_val);
+    display.print(" D:");
+    if (sonar_dist < 0) {
+        display.print("---");
+    } else {
+        display.print(sonar_dist, 0);
+    }
+    display.print("cm");
+
+    // Dòng 4 (y=46): Battery + Speed
+    display.setCursor(0, 46);
     display.print("Bat:");
     display.print(flight_batt, 1);
-    display.print("V W:");
-    display.print(flight_wind, 1);
+    display.print("V Spd:");
+    display.print(flight_spd, 0);
+    display.print("m/s");
 
-    // Dòng 4: Fence Status
-    display.setCursor(0, 36);
-    if (flight_fence == 0) {
-        display.print("Fence: OFF");
-    } else if (flight_fence == 1) {
-        display.print("Fence: OK");
-    } else {
-        display.print("!! FENCE BREACH !!");
-    }
-
-    // Dòng 5: Sensor
-    display.setCursor(0, 48);
-    display.print("T:");
-    display.print(temp_val, 0);
-    display.print(" H:");
-    display.print(hum_val, 0);
-    display.print(" CO2:");
-    display.print(mq_raw_val);
-
-    // Alert icon
-    if (env_alert) {
-        display.setCursor(100, 48);
-        display.print("!!");
-    }
+    // Dòng 5 (y=56): Fence + WiFi RSSI indicator
+    display.setCursor(0, 56);
+    display.print(flight_fence == 2 ? "!FENCE!" :
+                  flight_fence == 1 ? "FenceOK" : "Fence-");
+    display.print(" R:");
+    display.print(WiFi.RSSI());
 
     display.display();
 }
@@ -400,14 +421,18 @@ void loop() {
     if (now - lastMsg >= interval) {
         lastMsg = now;
 
-        temp_val = dht.readTemperature();
-        hum_val  = dht.readHumidity();
+        float t_new = dht.readTemperature();
+        float h_new = dht.readHumidity();
 
         bool dht_ok = true;
-        if (isnan(temp_val) || isnan(hum_val)) {
-            temp_val   = 0.0;
-            hum_val    = 0.0;
+        if (isnan(t_new) || isnan(h_new)) {
+            // [FIX] Giữ nguyên giá trị cũ thay vì về 0
+            // → Tránh OLED và MQTT nhảy 0 xen kẽ
             dht_ok = false;
+            Serial.println("[DHT] Read failed, keeping last value");
+        } else {
+            temp_val = t_new;
+            hum_val  = h_new;
         }
 
         mq_raw_val = analogRead(MQ135_PIN);
