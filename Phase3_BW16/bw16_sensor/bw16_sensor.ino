@@ -417,7 +417,16 @@ void setup() {
     wifiClient.setBlockingMode();
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
+    // [FIX] Tăng buffer MQTT lên 512 bytes vì payload telemetry + topic string vượt quá 128 bytes mặc định
+    if (!client.setBufferSize(512)) {
+        Serial.println("[MQTT] Khong the setBufferSize, dung thu vien cu?");
+    }
     client.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
+
+    // [FIX] Khởi tạo Servo: attach 1 lần duy nhất giống servo_test.ino, không detach nữa
+    payloadServo.attach(SERVO_PIN);
+    servo_attached = true;
+    payloadServo.write(0);
 
     Serial.println("[INIT] Setup complete!");
 }
@@ -510,13 +519,10 @@ void loop() {
     if (servo_pending_angle >= 0) {
         int angle = servo_pending_angle;
         servo_pending_angle = -1;   // xóa flag người dùng
-        if (!servo_attached) {
-            payloadServo.attach(SERVO_PIN);
-            delay(30);              // An toàn khi gọi từ loop()
-            servo_attached = true;
-        }
+        
+        // Không gọi attach() ở đây nữa vì đã attach trong setup()
         payloadServo.write(angle);
-        servo_detach_time = millis() + 2000;
+        
         Serial.print("[SERVO] write ");
         Serial.println(angle);
         // [DEBUG] Hiển thị góc trên OLED vùng vàng để xác nhận loop() đã thực thi
@@ -538,10 +544,5 @@ void loop() {
             cached_rssi = (int)WiFi.RSSI();
         }
     }
-
-    // Tự động detach servo sau khi quay xong (non-blocking) để ngắt PWM idle → hết rè rè
-    if (servo_attached && now >= servo_detach_time) {
-        payloadServo.detach();
-        servo_attached = false;
-    }
+    // [FIX] Xóa logic detach servo, giữ servo luôn active giống servo_test.ino
 }
