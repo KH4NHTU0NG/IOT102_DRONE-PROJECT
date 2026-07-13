@@ -25,7 +25,7 @@ JMAVSIM_JAR="$HOME/jMAVSim/out/production/jmavsim.jar"
 if [ -n "$JAVA_CMD" ] && [ -f "$JMAVSIM_JAR" ]; then
     echo "🎮 Đang mở cửa sổ 3D jMAVSim..."
     # Khởi chạy cửa sổ 3D jMAVSim chạy ngầm kết nối cổng telemetry 14550
-    "$JAVA_CMD" -cp "$JMAVSIM_JAR:$HOME/jMAVSim/lib/*" me.drton.jmavsim.Simulator -udp 14550 >/tmp/jmavsim.log 2>&1 &
+    (cd "$HOME/jMAVSim" && "$JAVA_CMD" --add-exports java.desktop/sun.awt=ALL-UNNAMED -cp "$JMAVSIM_JAR:$HOME/jMAVSim/lib/*" me.drton.jmavsim.Simulator -udp 14560 > /tmp/jmavsim.log 2>&1 &)
     JMAVSIM_PID=$!
     echo "✅ Cửa sổ 3D jMAVSim đã mở (PID: $JMAVSIM_PID)"
     sleep 2
