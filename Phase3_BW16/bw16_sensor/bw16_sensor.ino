@@ -212,7 +212,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
                 servo_attached = true;
             }
             payloadServo.write(angle);
-            servo_detach_time = millis() + 2000; // 2s đủ servo quay tới góc mục tiêu
+            yield();  // [FIX] Nhường CPU, giúp PWM timer xử lý ngắt đúng thời điểm
+            servo_detach_time = millis() + 2000;
             Serial.print("[CMD] SERVO ");
             Serial.println(angle);
         }
@@ -416,7 +417,9 @@ void loop() {
         digitalWrite(TRIG_PIN, HIGH);
         delayMicroseconds(10);
         digitalWrite(TRIG_PIN, LOW);
-        long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+        // [FIX] Giới hạn pulseIn xuống 8ms (tương đương ~140cm)
+        // Tránh block 30ms khi không có phản hồi → gây nhiễu PWM servo
+        long duration = pulseIn(ECHO_PIN, HIGH, 8000);
         if (duration == 0) {
             sonar_dist = -1.0;
         } else {
