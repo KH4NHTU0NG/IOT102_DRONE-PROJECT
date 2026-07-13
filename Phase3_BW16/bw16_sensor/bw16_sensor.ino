@@ -212,9 +212,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
         String angleStr = parseJsonField(msgString, "angle");
         if (angleStr.length() > 0) {
             int angle = constrain(angleStr.toInt(), 0, 180);
-            // [FIX] Không attach/write trong callback — delay() trong callback phá PubSubClient
-            // Chỉ lưu góc vào pending, loop() sẽ thực thi
             servo_pending_angle = angle;
+            // [DEBUG] Nháy LED đỏ 2 lần — xác nhận BW16 đã nhận lệnh SERVO
+            // (dùng thay Serial Monitor khi không cắm USB)
+            for (int i = 0; i < 2; i++) {
+                digitalWrite(LED_PIN, LED_ON);
+                delay(100);
+                digitalWrite(LED_PIN, LED_OFF);
+                delay(100);
+            }
         }
     }
 }
@@ -500,6 +506,16 @@ void loop() {
         servo_detach_time = millis() + 2000;
         Serial.print("[SERVO] write ");
         Serial.println(angle);
+        // [DEBUG] Hiển thị góc trên OLED vùng vàng để xác nhận loop() đã thực thi
+        display.clearDisplay();
+        display.setTextColor(SSD1306_WHITE);
+        display.setTextSize(1);
+        display.setCursor(0, 3);
+        display.print("SERVO -> ");
+        display.print(angle);
+        display.print(" deg");
+        display.display();
+        delay(600);  // Giữ hiển thị 0.6s rồi resume OLED bình thường
     }
 
     // [FIX] Cập nhật RSSI riêng mỗi 5s để không block PWM servo
