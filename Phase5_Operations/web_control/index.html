@@ -265,10 +265,24 @@
                     <button id="btn_arm" class="btn btn-arm" onclick="sendFlightCommand('ARM')">ARM</button>
                     <button id="btn_disarm" class="btn btn-danger" onclick="sendFlightCommand('DISARM')">DISARM</button>
                 </div>
+                <!-- Altitude Control -->
+                <div class="sec" style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>Takeoff Altitude</span>
+                    <span id="alt_display" style="font-size:11px;font-weight:700;color:var(--accent);">10 m</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                    <input type="range" id="alt_slider" min="1" max="50" value="10" step="1"
+                        style="flex:1;accent-color:var(--accent);cursor:pointer;"
+                        oninput="updateAltDisplay(this.value)">
+                    <input type="number" id="alt_input" value="10" min="1" max="50" step="1"
+                        style="width:48px;padding:3px 5px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);font-size:12px;text-align:center;"
+                        oninput="syncAltSlider(this.value)">
+                </div>
                 <div class="btn-g2" style="margin-bottom:4px;">
                     <button id="btn_takeoff" class="btn btn-takeoff" onclick="sendFlightCommand('TAKEOFF')">TAKEOFF</button>
                     <button id="btn_land" class="btn btn-danger" onclick="sendFlightCommand('LAND')">LAND</button>
                 </div>
+                <button class="btn btn-primary btn-full" style="margin-bottom:4px;font-size:10px;" onclick="sendSetAlt()">✈ SET ALTITUDE (Flying)</button>
                 <div class="btn-g2" style="margin-bottom:4px;">
                     <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">RTL</button>
                     <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">GUIDED</button>

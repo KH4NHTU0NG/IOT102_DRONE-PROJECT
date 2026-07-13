@@ -419,13 +419,33 @@
     }
 
     /* Commands */
+    function getTargetAlt() {
+        return parseFloat(document.getElementById('alt_input').value) || 10.0;
+    }
+    function updateAltDisplay(val) {
+        document.getElementById('alt_display').textContent = val + ' m';
+        document.getElementById('alt_input').value = val;
+    }
+    function syncAltSlider(val) {
+        const v = Math.min(50, Math.max(1, parseInt(val) || 10));
+        document.getElementById('alt_slider').value = v;
+        document.getElementById('alt_display').textContent = v + ' m';
+    }
+    function sendSetAlt() {
+        if (!client || !isConnected) { addLog('[ERR] Chưa kết nối MQTT'); return; }
+        const alt = getTargetAlt();
+        const msg = buildMsg({ command: 'SET_ALT', alt: alt }, TOPIC_FLIGHT);
+        client.send(msg);
+        addLog(`[PUB] SET_ALT ${alt}m → ${TOPIC_FLIGHT}`);
+    }
     function sendFlightCommand(cmdName) {
         if (!client || !isConnected) { addLog("[ERR] Chưa kết nối MQTT"); return; }
         const dangerous = ['ARM', 'DISARM', 'TAKEOFF', 'LAND', 'RTL'];
         if (dangerous.includes(cmdName) && !confirm(`Xác nhận gửi lệnh ${cmdName} đến Drone?\n\n Hãy đảm bảo drone ở vị trí an toàn.`)) return;
-        const msg = buildMsg({ command: cmdName, alt: cmdName === "TAKEOFF" ? 10.0 : 0.0 }, TOPIC_FLIGHT);
+        const alt = cmdName === 'TAKEOFF' ? getTargetAlt() : 0.0;
+        const msg = buildMsg({ command: cmdName, alt }, TOPIC_FLIGHT);
         client.send(msg);
-        addLog(`[PUB] ${cmdName} → ${TOPIC_FLIGHT}`);
+        addLog(`[PUB] ${cmdName}${cmdName === 'TAKEOFF' ? ' ' + alt + 'm' : ''} → ${TOPIC_FLIGHT}`);
     }
 
     function sendPayloadCommand(cmdName) {
