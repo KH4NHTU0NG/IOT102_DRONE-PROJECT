@@ -14,8 +14,10 @@
 const char* ssid        = SECRET_SSID;
 const char* password    = SECRET_PASS;
 const char* mqtt_server = "broker.hivemq.com";
-const char* topic_sensors = "iot102_drone/payload/sensors";
-const char* topic_payload = "iot102_drone/control/payload";
+const char* topic_sensors  = "iot102_drone/payload/sensors";
+const char* topic_payload  = "iot102_drone/control/payload";
+// [FIX] Topic riêng cho telemetry xuống từ Fusion, tách khỏi lệnh command
+const char* topic_telem_dn = "iot102_drone/telemetry/downstream";
 const int   mqtt_port   = 1883;
 
 // --- Pin Definitions ---
@@ -143,40 +145,37 @@ void callback(char* topic, byte* payload, unsigned int length) {
         msgString += (char)payload[i];
     }
 
-    Serial.print("[MQTT] ");
+    Serial.print("[MQTT] topic=");
+    Serial.print(topic);
+    Serial.print(" msg=");
     Serial.println(msgString);
 
-    // 1. Downstream telemetry from SITL (cập nhật thông số bay cho OLED)
-    String modeStr = parseJsonField(msgString, "mode");
-    if (modeStr.length() > 0) {
-        flight_mode = modeStr;
-        lastTelemetryTime = millis();
+    // ── Route theo topic ──────────────────────────────────────
+    String topicStr(topic);
 
+    // 1. Telemetry downstream từ Fusion (topic riêng, không lẫn với command)
+    if (topicStr == String(topic_telem_dn)) {
+        String modeStr = parseJsonField(msgString, "mode");
+        if (modeStr.length() > 0) {
+            flight_mode = modeStr;
+            lastTelemetryTime = millis();
+        }
         String armedStr = parseJsonField(msgString, "armed");
         drone_armed = (armedStr == "1" || armedStr == "true");
-
-        String altStr = parseJsonField(msgString, "alt");
-        if (altStr.length() > 0) flight_alt = altStr.toFloat();
-
-        String spdStr = parseJsonField(msgString, "spd");
-        if (spdStr.length() > 0) flight_spd = spdStr.toFloat();
-
+        String altStr  = parseJsonField(msgString, "alt");
+        if (altStr.length()  > 0) flight_alt  = altStr.toFloat();
+        String spdStr  = parseJsonField(msgString, "spd");
+        if (spdStr.length()  > 0) flight_spd  = spdStr.toFloat();
         String battStr = parseJsonField(msgString, "batt");
         if (battStr.length() > 0) flight_batt = battStr.toFloat();
-
         String windStr = parseJsonField(msgString, "wind");
         if (windStr.length() > 0) flight_wind = windStr.toFloat();
-
-        String fenceStr = parseJsonField(msgString, "fence");
-        if (fenceStr.length() > 0) flight_fence = fenceStr.toInt();
-
-        // [FIX] Không đọc roll để ghi servo ở đây nữa
-        // → Tránh xung đột với lệnh SERVO thủ công từ Web
-
-        return;
+        String fenceStr= parseJsonField(msgString, "fence");
+        if (fenceStr.length()> 0) flight_fence= fenceStr.toInt();
+        return;  // done, không xử lý command
     }
 
-    // 2. Command payload (điều khiển thiết bị từ Web)
+    // 2. Command từ Web Dashboard (topic_payload)
     String command = parseJsonField(msgString, "command");
 
     if (command == "BUZZER_ON") {
@@ -263,7 +262,8 @@ void connectMQTT() {
         String clientId = "DroneIoT_BW16_" + String(random(0xffff), HEX);
         if (client.connect(clientId.c_str())) {
             Serial.println(" OK!");
-            client.subscribe(topic_payload);
+            client.subscribe(topic_payload);   // lệnh từ Web
+            client.subscribe(topic_telem_dn);  // telemetry từ Fusion
             break;
         } else {
             Serial.print(" Failed, rc=");

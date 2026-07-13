@@ -88,7 +88,8 @@ def main():
                 
                 try:
                     if mqtt_client and mqtt_client.is_connected():
-                        mqtt_client.publish(config.TOPIC_PAYLOAD_CMD, telemetry_payload)
+                        # [FIX] Dùng topic riêng để không xung đột với SERVO command
+                        mqtt_client.publish(config.TOPIC_TELEM_DOWN, telemetry_payload)
                 except Exception as e:
                     print(f"[MQTT] Gửi Downstream thất bại: {e}")
                 

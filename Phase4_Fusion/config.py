@@ -25,6 +25,8 @@ TOPIC_SIM_CMD     = "iot102_drone/control/sim_param"
 TOPIC_ATTITUDE    = "iot102_drone/telemetry/attitude"
 TOPIC_GPS         = "iot102_drone/telemetry/gps"
 TOPIC_STATUS      = "iot102_drone/telemetry/status"
+# [FIX] Topic riêng để đẩy telemetry xuống BW16 (tách khỏi TOPIC_PAYLOAD_CMD)
+TOPIC_TELEM_DOWN  = "iot102_drone/telemetry/downstream"
 
 # --- SITL Config ---
 SITL_HOST = "127.0.0.1"
