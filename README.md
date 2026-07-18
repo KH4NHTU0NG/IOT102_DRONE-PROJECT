@@ -1,235 +1,111 @@
-# Drone IoT — Mạch ứng dụng Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
+# Drone IoT — Hệ Thống Giám Sát Môi Trường & Điều Khiển Tải Trọng UAV Thông Minh
+*Dự án đồ án môn học IOT102 — Triển khai Bay Thật Thực Địa (`IRL_test` Branch)*
+
+---
+
+## 🌟 TỔNG QUAN DỰ ÁN (PROJECT OVERVIEW)
 
 > [!IMPORTANT]
 > 🌐 **NHÁNH BAY THẬT THỰC ĐỊA (`IRL_test` BRANCH):**
-> Nhánh này được tối ưu và cấu hình chuyên biệt cho việc **Kiểm thử & Triển khai Bay Thật ngoài trời (In-Real-Life Field Testing)** với Quadcopter 5 inch (`Motor MT2204 + ESC 55A + Tay cầm MC6C + Pin 4S 1800mAh`) kết hợp hộp cảm biến IoT độc lập (`Realtek BW16 + WiFi 4G Hotspot + Cloud MQTT`).
+> Nhánh này được tối ưu và cấu hình chuyên biệt cho việc **Kiểm thử & Triển khai Bay Thật ngoài trời (In-Real-Life Field Testing)** với Quadcopter 5 inch (`Motor MT2204 + ESC 55A + Flight Controller + Tay cầm MC6C + Pin 4S 1800mAh`) kết hợp Hộp tải trọng IoT không dây độc lập (`Realtek BW16 + WiFi 4G Hotspot + Cloud MQTT`).
 > 
 > 👉 **Xem ngay cẩm nang hướng dẫn chi tiết từng bước ra sân bay tại:** **[`IRL_FLIGHT_GUIDE.md`](file:///Users/trankhanhtuong/Desktop/IOT102_DRONE-PROJECT/IRL_FLIGHT_GUIDE.md)**
 
-Dự án IoT tích hợp Board **Ameba BW16 (RTL8720DN)** với cụm cảm biến môi trường và Servo thả hàng, kết nối qua **MQTT** về máy chủ Python Fusion Gateway trên macOS. Dữ liệu được lưu vào **InfluxDB** (Docker), hiển thị trực quan trên **Grafana** và điều khiển qua **Web Control Dashboard**.
-
+Dự án nghiên cứu thiết kế và triển khai một **Hộp Tải Trọng IoT Thông Minh (Smart IoT Payload Box)** gắn dưới bụng máy bay không người lái (UAV Quadcopter). Hệ thống sử dụng vi điều khiển **Realtek Ameba BW16 (RTL8720DN)** chuẩn WiFi băng tần kép để thu thập các chỉ số môi trường theo thời gian thực (Nhiệt độ, Độ ẩm, Khí Gas/CO2, Khoảng cách Sonar) và cho phép điều khiển cơ cấu chốt Servo thả hàng cứu trợ/mô hình từ xa thông qua giao thức **MQTT Cloud** và **Web Control Dashboard**.
 
 ---
 
-## Kiến Trúc Hệ Thống
+## 🏗️ KIẾN TRÚC HOẠT ĐỘNG THỰC ĐỊA (DUAL-LAYER FIELD ARCHITECTURE)
+
+Nhằm tối ưu độ tin cậy và đảm bảo an toàn tuyệt đối khi bay ngoài trời, hệ thống được thiết kế tách biệt theo **Hai tầng vận hành độc lập (Dual-Layer Architecture)**:
 
 ```mermaid
 graph TD
-    subgraph Device_Layer["LỚP THIẾT BỊ (DEVICE LAYER)"]
-        BW16["Ameba BW16 (RTL8720DN)<br>Payload Board"]
-        Sensors["Inputs:<br>- DHT22 (Nhiệt/Ẩm)<br>- MQ-135 (Gas)"]
-        Outputs["Outputs:<br>- OLED (I2C)<br>- Buzzer & LEDs<br>- Servo (PWM)"]
-        
-        SITL["ArduPilot SITL<br>(Drone Simulation)"]
-        QGC["QGroundControl"]
-        
-        Sensors --> BW16
-        BW16 --> Outputs
-        QGC <--> SITL
+    subgraph Flight_Layer["1. TẦNG ĐỘNG LỰC BAY (FLIGHT CONTROL LAYER - 2.4GHz Radio)"]
+        MC6C["Tay cầm điều khiển<br>Microzone MC6C"] <-->|Sóng vô tuyến 2.4GHz / S.BUS| FC["Flight Controller + ESC 55A<br>+ 4x Motor MT2204 + Pin 4S 1800mAh"]
     end
 
-    subgraph Gateway_Layer["LỚP GATEWAY (fusion.py)"]
-        Fusion["Python Fusion Gateway<br>(Data & Flight Dispatcher)"]
+    subgraph IoT_Layer["2. TẦNG GIÁM SÁT IOT (PAYLOAD LAYER - WiFi 4G Cloud MQTT)"]
+        BW16["Hộp Payload Realtek BW16<br>(DHT22 + MQ-135 + Sonar + OLED + Servo)"] <-->|MQTT over WiFi 4G Hotspot| HiveMQ["Public MQTT Cloud<br>(broker.hivemq.com : 1883)"]
+        HiveMQ <-->|WebSockets Port 8000| WebDash["Web GCS Dashboard<br>(Laptop / Smartphone tại mặt đất)"]
     end
-
-    subgraph App_Layer["LỚP ỨNG DỤNG (APP LAYER)"]
-        WebDash["Web Control Dashboard<br>(index.html)"]
-        DB["InfluxDB (Docker)<br>Time-Series DB"]
-        Grafana["Grafana (Docker)<br>Visualizer"]
-    end
-
-    BW16 <-->|MQTT via WiFi| Fusion
-    SITL <-->|MAVLink TCP:5763| Fusion
-    
-    Fusion -->|HTTP API Write| DB
-    DB -->|Data Source| Grafana
-    
-    WebDash <-->|MQTT WebSockets :8000| Fusion
 ```
+
+### 💡 Điểm sáng kỹ thuật:
+1. **Độc lập an toàn bay:** Tầng lái máy bay (Cất cánh, di chuyển, hạ cánh) được điều khiển hoàn toàn bằng sóng vô tuyến 2.4GHz có độ trễ cực thấp (< 10ms), không phụ thuộc vào mạng Internet hay máy chủ đám mây.
+2. **Giám sát IoT không dây thời gian thực:** Hộp BW16 tự động bắt WiFi 4G từ điện thoại phát ra, đẩy dữ liệu telemetry môi trường về Public Cloud MQTT với tần suất 1s/lần.
+3. **Hardware PWM Servo Control:** Cơ cấu chốt Servo SG90 thả hàng sử dụng bộ đếm Hardware PWM (`pwmout_api`), đảm bảo chốt mở chính xác tuyệt đối mà không bị xung nhịp WiFi phá sóng như các thư viện Software PWM thông thường.
 
 ---
 
-## Thành Phần Phần Cứng
+## 📦 CẤU TRÚC THƯ MỤC CHUẨN (PROJECT DIRECTORY STRUCTURE)
 
-| Linh kiện | Chân BW16 | Điện áp | Giao thức |
-|:----------|:----------|:--------|:----------|
-| DHT22 (Nhiệt/Ẩm) | DATA → PA30 | 3.3V | One-Wire |
-| MQ-135 (Khí gas) | AOUT → PB3 | 5V | Analog ADC |
-| OLED SSD1306 | SDA→PA26, SCL→PA25 | 3.3V | I2C |
-| Servo SG90 | SIG → PA13 | 5V | PWM |
-| Buzzer | I/O → PA14 | 3.3V | GPIO |
-| LED Đỏ (Cảnh báo) | Anode → PA15 | 3.3V | GPIO |
-| LED Xanh (An toàn) | Anode → PA27 | 3.3V | GPIO |
-
----
-
-## Các Kịch Bản Ứng Dụng
-
-Hệ thống mạch BW16 và Fusion Gateway này được thiết kế để hỗ trợ 2 kịch bản hoạt động:
-
-1. **Bay thật (Real Flight):**
-   Gắn mạch Ameba BW16 cùng các cụm cảm biến và Servo trực tiếp lên thân Drone thực tế. BW16 đóng vai trò làm *Payload Board*, thu thập thông tin môi trường và nhận lệnh thả hàng. Dữ liệu kết nối về trạm mặt đất (Gateway) qua WiFi/4G bằng MQTT, còn Drone nhận lệnh điều khiển bay MAVLink thực tế qua Telemetry Radio.
-
-2. **Bay ảo (SITL Simulation):**
-   Chạy ArduPilot SITL trên máy tính để mô phỏng drone (tạo ra toạ độ, độ cao ảo). Mạch BW16 vẫn được cấp nguồn thực tế và đo cảm biến thực tế, nhưng được dùng để kiểm thử phần mềm trên máy tính (Gateway + Web Dashboard). Cách này giúp phát triển code cực kỳ an toàn mà không sợ hỏng hóc thiết bị.
-
----
-
-## Cài Đặt Lần Đầu
-
-### Yêu cầu
-
-- macOS M1/M2/M3/M4
-- Docker Desktop
-- Arduino IDE 2.x + Board Package **Ameba RTL8720DN 3.1.9**
-- Python 3.10+
-- ArduPilot SITL (`sim_vehicle.py`)
-
-### Thư viện Arduino cần cài
-
-1. `PubSubClient` (Nick O'Leary)
-2. `DHT sensor library` (Adafruit)
-3. `Adafruit GFX Library`
-4. `Adafruit SSD1306`
-
-### Bước 1: Cấu hình WiFi
-
-Mở `Phase3_BW16/bw16_sensor/secrets.h` và điền thông tin mạng:
-
-```cpp
-#define SECRET_SSID "Ten_WiFi_Cua_Ban"
-#define SECRET_PASS "Mat_Khau_WiFi"
-```
-
-> ⚠️ File `secrets.h` đã được thêm vào `.gitignore`. **Không commit** file này lên GitHub.
-
-### Bước 2: Khởi động Docker
-
-```bash
-cd Phase1_Docker
-bash setup.sh
-```
-
-Script tự động:
-- Khởi động Mosquitto, InfluxDB, Grafana qua Docker Compose v2
-- Tạo bucket `drone_data` trong InfluxDB
-- Lưu token vào `Phase4_Fusion/.influx_token`
-
-### Bước 3: Tạo Python venv
-
-```bash
-cd Phase4_Fusion
-bash setup_venv.sh
-```
-
-### Bước 4: Nạp Firmware BW16
-
-1. Mở `Phase3_BW16/bw16_sensor/bw16_sensor.ino` bằng Arduino IDE
-2. Chọn **Board** → `AI-Thinker BW16`
-3. Chọn **Port** (cổng USB của BW16)
-4. Nhấn **Upload**
-5. Mở **Serial Monitor** ở 115200 baud — xác nhận thấy `[SYSTEM] Setup hoan tat!`
-
----
-
-## Khởi Động Hàng Ngày
-
-> ⚠️ **Quan trọng:** Tất cả lệnh bên dưới phải chạy từ thư mục `IOT102_DRONE-PROJECT/`.
-
-```bash
-# Vào đúng thư mục gốc trước
-cd <đường dẫn đến IOT102_DRONE-PROJECT>
-
-# Một lệnh khởi động toàn bộ hệ thống
-bash Phase5_Operations/start_all.sh
-```
-
-Hoặc thủ công từng bước (cũng chạy từ `IOT102_DRONE-PROJECT/`):
-
-```bash
-cd <đường dẫn đến IOT102_DRONE-PROJECT>
-
-# 1. Docker
-cd Phase1_Docker && docker compose up -d && cd ..
-
-# 2. SITL (mở Terminal mới)
-cd Phase2_SITL && bash run_sitl.sh
-
-# 3. Fusion Gateway (Terminal khác)
-cd Phase4_Fusion
-source drone_env/bin/activate
-python3 fusion.py
-```
-
----
-
-## Web Control Dashboard
-
-Mở file `Phase5_Operations/web_control/index.html` bằng Chrome/Firefox (Ctrl+O / Cmd+O).
-
-**Tính năng:**
-- Hiển thị telemetry thời gian thực: Nhiệt độ, Độ ẩm, CO2, RSSI
-- Điều khiển Drone: ARM / TAKEOFF 10m / LAND / RTL (có confirm dialog)
-- Điều khiển Payload: Bật/tắt Còi, Đèn LED, Servo thả hàng
-- Auto-reconnect MQTT khi mất kết nối (exponential backoff, tối đa 30s)
-- Disable tất cả nút khi chưa kết nối (tránh lệnh nhầm)
-
-
-
-## Dừng Hệ Thống
-
-```bash
-# Từ thư mục gốc IOT102_DRONE-PROJECT/
-cd <đường dẫn đến IOT102_DRONE-PROJECT>
-bash Phase5_Operations/stop_all.sh
-
-# Hoặc thủ công
-pkill -f fusion.py
-cd Phase1_Docker && docker compose down
-```
-
-
-## Xử Lý Sự Cố
-
-| Triệu chứng | Nguyên nhân | Giải pháp |
-|:------------|:------------|:----------|
-| `No such file or directory` khi chạy script | Đang ở sai thư mục | `cd IOT102_DRONE-PROJECT` trước, rồi `bash Phase5_Operations/start_all.sh` |
-| Serial Monitor in `Error amb_ard_pin_check_fun` | `Wire.begin()` bị gọi 2 lần | Đã sửa trong v2.6 |
-| OLED không hiển thị cảnh báo gas | `is_alert` scoping sai | Đã sửa trong v3.0 |
-| Web không kết nối được MQTT | CDN Paho sai filename | Đã sửa trong v3.0 |
-| Gateway bị treo khi gửi TAKEOFF | `master_lock` contention | Đã sửa trong v3.0 |
-| InfluxDB không nhận data | Token sai/rỗng | Chạy lại `setup.sh`, kiểm tra `.influx_token` |
-| BW16 không kết nối WiFi | Sai SSID/pass | Kiểm tra `secrets.h` |
-
----
-
-## Cấu Trúc Thư Mục
+Toàn bộ dự án được quy hoạch khoa học thành 3 thư mục cốt lõi:
 
 ```text
 IOT102_DRONE-PROJECT/
-├── Phase1_Docker/
-│   ├── docker-compose.yml      # Mosquitto 2.0, InfluxDB 2.0, Grafana 10.4
-│   ├── mosquitto/mosquitto.conf
-│   └── setup.sh                # Chạy 1 lần đầu
-├── Phase2_SITL/
-│   ├── install_sitl.sh
-│   └── run_sitl.sh
-├── Phase3_BW16/
+├── README.md                 # Tài liệu tổng quan đồ án (File bạn đang đọc)
+├── IRL_FLIGHT_GUIDE.md       # Cẩm nang hướng dẫn bay thật thực địa A-Z
+├── .gitignore                # Cấu hình bỏ qua tệp tạm & mật khẩu WiFi
+│
+├── 1_BW16_IoT_Payload/       # [PHẦN CỨNG & FIRMWARE IOT PAYLOAD GẮN TRÊN UAV]
+│   ├── wiring_diagram.md     # Sơ đồ đấu nối chân mạch BW16 với cảm biến & Servo
 │   └── bw16_sensor/
-│       ├── bw16_sensor.ino     # Firmware v3.3
-│       └── secrets.h           # ← KHÔNG commit file này
-├── Phase4_Fusion/
-│   ├── fusion.py               # Gateway v3.3
-│   ├── requirements.txt
-│   └── setup_venv.sh
-└── Phase5_Operations/
-    ├── start_all.sh
-    ├── stop_all.sh
-    └── web_control/
-        └── index.html          # Dashboard v3.3
+│       ├── bw16_sensor.ino   # Mã nguồn C++ chính (DHT22, MQ-135, Sonar, OLED, HW-PWM Servo)
+│       └── secrets.h         # Template cấu hình Tên WiFi & Mật khẩu 4G Hotspot
+│
+├── 2_Web_GCS_Dashboard/      # [GIAO DIỆN TRẠM MẶT ĐẤT - GROUND CONTROL STATION]
+│   ├── index.html            # Giao diện điều khiển Web Dashboard (Cloud MQTT WebSockets)
+│   ├── assets/css/styles.css # Bảng tạo kiểu tối màu chuyên nghiệp (Dark HUD Design)
+│   └── assets/js/app.js      # Logic xử lý MQTT, biểu đồ Chart.js & điều khiển chốt
+│
+└── 3_Academic_Reports/       # [BÁO CÁO HỌC THUẬT & TÀI LIỆU BẢO VỆ]
+    ├── academic_report.md    # Báo cáo đồ án toàn văn theo chuẩn học thuật
+    ├── checklist.md          # Bảng tự đánh giá tiêu chuẩn kỹ thuật đồ án
+    └── DEFENSE_FAQ.md        # Bộ câu hỏi phản biện từ Hội đồng & lời giải chi tiết
 ```
 
 ---
 
-> **Tác giả:** IOT102 Drone Project — by KH4NHTU0NG
-> **Môi trường:** macOS Apple Silicon + ArduPilot SITL + HiveMQ Public Broker
+## ⚙️ THÀNH PHẦN PHẦN CỨNG IOT (PAYLOAD HARDWARE)
+
+| Linh kiện | Chân kết nối trên BW16 | Điện áp | Giao thức | Chức năng trong đồ án |
+| :--- | :--- | :--- | :--- | :--- |
+| **DHT22** | DATA → `PA30` | 3.3V | One-Wire | Đo Nhiệt độ (`°C`) & Độ ẩm (`%`) không khí tại độ cao bay |
+| **MQ-135** | AOUT → `PB3` | 5V | Analog ADC | Đo mức độ ô nhiễm CO2/Khí Gas (`ADC < 600 là SAFE`) |
+| **HC-SR04** | TRIG → `PB2`, ECHO → `PB1` | 5V | Ultrasonic | Đo khoảng cách bụng máy bay xuống đất (hỗ trợ canh thả hàng) |
+| **OLED SSD1306** | SDA → `PA26`, SCL → `PA25` | 3.3V | I2C (`0x3C`) | Hiển thị thông số trực tiếp trên vỏ hộp Payload |
+| **Servo SG90** | SIG → `PA13` (`PA_13`) | 5V | Hardware PWM | Cơ cấu chốt xoay `0° - 180°` thả gói hàng xuống đất |
+| **Buzzer** | I/O → `PA14` | 3.3V | GPIO (Active LOW) | Còi báo động môi trường & phát âm thanh tìm máy bay |
+| **LED Cảnh báo** | Đỏ → `PA15`, Xanh → `PA27` | 3.3V | GPIO (Active HIGH) | Đèn báo trạng thái An toàn (`SAFE`) hoặc Cảnh báo (`DANGER`) |
+
+---
+
+## 🚀 HƯỚNG DẪN KHỞI ĐỘNG NHANH THỰC ĐỊA (QUICK START)
+
+### Bước 1: Nạp Firmware vào mạch BW16
+1. Mở `1_BW16_IoT_Payload/bw16_sensor/secrets.h` bằng **Arduino IDE 2.x**.
+2. Điền thông tin WiFi 4G Hotspot từ điện thoại của bạn:
+   ```cpp
+   #define SECRET_SSID "Ten_WiFi_4G_Cua_Ban"
+   #define SECRET_PASS "Mat_Khau_WiFi_4G"
+   ```
+3. Chọn Board: **`AI-Thinker BW16`** (cần cài đặt package *Ameba RTL8720DN*).
+4. Nhấn **Upload** để nạp code vào mạch. Gắn mạch lên máy bay cùng cụm pin.
+
+### Bước 2: Mở Giao Diện Trạm Mặt ĐẤT (Web GCS)
+1. Tại sân bay, kết nối Laptop hoặc Smartphone vào cùng mạng WiFi 4G Hotspot.
+2. Mở trực tiếp tệp **[`index.html`](file:///Users/trankhanhtuong/Desktop/IOT102_DRONE-PROJECT/2_Web_GCS_Dashboard/index.html)** bằng trình duyệt Chrome/Firefox (`Ctrl + O` / `Cmd + O`).
+3. Kiểm tra MQTT Broker để mặc định `broker.hivemq.com` (Port `8000`). Nhấn **Connect**.
+4. Khi đèn chuyển sang **`Online`**, bạn có thể quan sát đồ thị cảm biến thực tế và kéo thanh Servo để mở chốt thả hàng ngay lập tức!
+
+---
+
+## 🎓 TÀI LIỆU THAM KHẢO & BẢO VỆ
+- 📖 **Chi tiết quy trình cất cánh ngoài trời:** Xem tại `IRL_FLIGHT_GUIDE.md`.
+- ❓ **Bộ câu hỏi bảo vệ trước Hội đồng:** Xem tại `3_Academic_Reports/DEFENSE_FAQ.md`.
+- 📝 **Báo cáo tổng kết môn học:** Xem tại `3_Academic_Reports/academic_report.md`.
+
+---
+> **Tác giả:** Nhóm Phát Triển Đồ Án IOT102 Drone Environmental Payload
+> **Bản quyền:** Khoa Công Nghệ Thông Tin & IoT — 2026

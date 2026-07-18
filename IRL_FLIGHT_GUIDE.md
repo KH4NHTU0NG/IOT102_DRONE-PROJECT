@@ -29,7 +29,7 @@ graph TD
 
 ### Bước 1: Cấu hình WiFi 4G cho mạch BW16
 Trước khi ra sân, bạn bật tính năng **Phát WiFi di động (Personal Hotspot)** trên điện thoại 4G.
-1. Mở tệp `Phase3_BW16/bw16_sensor/secrets.h` trong Arduino IDE.
+1. Mở tệp `1_BW16_IoT_Payload/bw16_sensor/secrets.h` trong Arduino IDE.
 2. Nhập chính xác Tên WiFi (`SECRET_SSID`) và Mật khẩu (`SECRET_PASS`) của điện thoại:
    ```cpp
    #define SECRET_SSID "Ten_WiFi_4G_Cua_Ban"
@@ -49,7 +49,7 @@ Trước khi ra sân, bạn bật tính năng **Phát WiFi di động (Personal 
 Tại sân bay ngoài trời, bạn mở máy tính xách tay (Laptop) hoặc điện thoại thông minh, kết nối vào cùng mạng WiFi 4G Hotspot (hoặc 4G độc lập) và làm theo các bước:
 
 1. **Mở giao diện Web Dashboard:**
-   - Mở tệp `Phase5_Operations/web_control/index.html` (hoặc `3_Web_GCS_Dashboard/index.html`) bằng trình duyệt Chrome/Firefox (`Ctrl + O` / `Cmd + O`).
+   - Mở tệp `2_Web_GCS_Dashboard/index.html` bằng trình duyệt Chrome/Firefox (`Ctrl + O` / `Cmd + O`).
 2. **Kết nối Cloud MQTT:**
    - Tại góc trên bên phải màn hình, kiểm tra `MQTT Broker` đang để mặc định là `broker.hivemq.com` (Port `8000` cho WebSockets).
    - Nhấn nút **`Connect`**. Khi đèn trạng thái chuyển sang màu xanh lá **`Online`**, hệ thống đã kết nối thành công.
