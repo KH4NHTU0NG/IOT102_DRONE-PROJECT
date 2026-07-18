@@ -58,6 +58,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // --- Thresholds & Constants ---
 const int   CO2_THRESHOLD      = 600;
+const float TEMP_THRESHOLD     = 40.0;
 const int   WIFI_MAX_RETRIES   = 30;
 const int   MQTT_MAX_RETRIES   = 5;
 const int   MQTT_RETRY_DELAY   = 3000;
@@ -298,69 +299,72 @@ void updateOLED(bool env_alert) {
     display.setTextColor(SSD1306_WHITE);
 
     // ═══════════════════════════════════════════════════
-    // VÙNG VÀNG (y = 0–15): Tiêu đề + Trạng thái alert
+    // VÙNG VÀNG (y = 0–15): Tiêu đề / Trạng thái cảnh báo
     // ═══════════════════════════════════════════════════
     display.setTextSize(1);
-    display.setCursor(0, 3);  // Căn giữa dọc vùng vàng
+    display.setCursor(0, 3);
     if (env_alert) {
-        display.print("** CANH BAO O NHIEM **");
+        if (temp_val >= TEMP_THRESHOLD && mq_raw_val > CO2_THRESHOLD) {
+            display.print("** NGUY HIEM KEP! **");
+        } else if (temp_val >= TEMP_THRESHOLD) {
+            display.print("** CANH BAO NHIET! **");
+        } else {
+            display.print("** CANH BAO O NHIEM **");
+        }
     } else {
-        display.print("DroneIoT ");
-        display.print(drone_armed ? "[ARMED]" : "[DISARM]");
+        display.print("* DRONE IOT & TELEM *");
     }
 
     // ═══════════════════════════════════════════════════
-    // VÙNG XANH (y = 16–63): Toàn bộ thông số cảm biến
+    // VÙNG XANH (y = 16–63): Kết hợp Cảm biến & Thông số bay
     // ═══════════════════════════════════════════════════
 
-    // Dòng 1 (y=16): Mode + Altitude
+    // Dòng 1 (y = 16): Nhiệt độ + Độ cao bay (Altitude)
     display.setCursor(0, 16);
-    display.print(flight_mode);
-    display.print(" Alt:");
-    display.print(flight_alt, 1);
-    display.print("m");
-
-    // Dòng 2 (y=26): Nhiệt độ + Độ ẩm
-    display.setCursor(0, 26);
-    display.print("T:");
+    display.print("Temp:");
     if (temp_val == 0.0 && hum_val == 0.0) {
-        display.print("--");
+        display.print("--.-");
     } else {
         display.print(temp_val, 1);
     }
-    display.print("C H:");
+    display.print("C");
+    if (temp_val >= TEMP_THRESHOLD) display.print("!");
+    else display.print(" ");
+    display.print("Alt:");
+    display.print(flight_alt, 1);
+    display.print("m");
+
+    // Dòng 2 (y = 28): Độ ẩm + Điện áp pin bay (Battery)
+    display.setCursor(0, 28);
+    display.print("Hum :");
     if (hum_val == 0.0 && temp_val == 0.0) {
         display.print("--");
     } else {
         display.print(hum_val, 0);
     }
-    display.print("%");
+    display.print("%  Bat:");
+    display.print(flight_batt, 1);
+    display.print("V");
 
-    // Dòng 3 (y=36): CO2 + Sonar
-    display.setCursor(0, 36);
-    display.print("CO2:");
+    // Dòng 3 (y = 40): Khí Gas / CO2
+    display.setCursor(0, 40);
+    display.print("Gas : ");
     display.print(mq_raw_val);
-    display.print(" D:");
+    display.print(" PPM");
+    if (env_alert) {
+        display.print(" (!)");
+    }
+
+    // Dòng 4 (y = 52): Khoảng cách Sonar (Dist) & Sóng WiFi
+    display.setCursor(0, 52);
+    display.print("Dist:");
     if (sonar_dist < 0) {
         display.print("---");
     } else {
         display.print(sonar_dist, 0);
+        display.print("cm");
     }
-    display.print("cm");
-
-    // Dòng 4 (y=46): Battery + Speed
-    display.setCursor(0, 46);
-    display.print("Bat:");
-    display.print(flight_batt, 1);
-    display.print("V Spd:");
-    display.print(flight_spd, 0);
-    display.print("m/s");
-
-    // Dòng 5 (y=56): Fence + WiFi RSSI (dùng cached, không gọi WiFi.RSSI() trực tiếp)
-    display.setCursor(0, 56);
-    display.print(flight_fence == 2 ? "!FENCE!" :
-                  flight_fence == 1 ? "FenceOK" : "Fence-");
-    display.print(" R:");
+    display.print("  W:");
     display.print(cached_rssi);
 
     display.display();
@@ -469,8 +473,9 @@ void loop() {
             sonar_dist = (duration * 0.0343) / 2.0;
         }
 
+        env_alert = (temp_val >= TEMP_THRESHOLD);
         if (now > MQ135_WARMUP_MS) {
-            env_alert = (mq_raw_val > CO2_THRESHOLD);
+            env_alert = env_alert || (mq_raw_val > CO2_THRESHOLD);
         }
 
         if (mqtt_buzzer_override) {

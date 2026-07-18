@@ -1,7 +1,13 @@
 # Drone IoT — Mạch ứng dụng Hệ Thống Giám Sát & Điều Khiển UAV Thông Minh
 
+> [!IMPORTANT]
+> 🌐 **NHÁNH BAY THẬT THỰC ĐỊA (`IRL_test` BRANCH):**
+> Nhánh này được tối ưu và cấu hình chuyên biệt cho việc **Kiểm thử & Triển khai Bay Thật ngoài trời (In-Real-Life Field Testing)** với Quadcopter 5 inch (`Motor MT2204 + ESC 55A + Tay cầm MC6C + Pin 4S 1800mAh`) kết hợp hộp cảm biến IoT độc lập (`Realtek BW16 + WiFi 4G Hotspot + Cloud MQTT`).
+> 
+> 👉 **Xem ngay cẩm nang hướng dẫn chi tiết từng bước ra sân bay tại:** **[`IRL_FLIGHT_GUIDE.md`](file:///Users/trankhanhtuong/Desktop/IOT102_DRONE-PROJECT/IRL_FLIGHT_GUIDE.md)**
 
 Dự án IoT tích hợp Board **Ameba BW16 (RTL8720DN)** với cụm cảm biến môi trường và Servo thả hàng, kết nối qua **MQTT** về máy chủ Python Fusion Gateway trên macOS. Dữ liệu được lưu vào **InfluxDB** (Docker), hiển thị trực quan trên **Grafana** và điều khiển qua **Web Control Dashboard**.
+
 
 ---
 
