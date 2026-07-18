@@ -289,56 +289,24 @@
     <!-- SIDEBAR RIGHT: Flight / Payload / Sim / MQTT -->
     <aside class="sidebar-right">
 
-        <!-- Flight Control -->
+        <!-- UAV Field Operation Info -->
         <div class="panel">
             <div class="panel-header">
-                <div class="panel-title">Flight Control</div>
-                <span class="tag tag-blue">MAVLink</span>
+                <div class="panel-title">UAV Field Operation</div>
+                <span class="tag tag-blue">IRL Mode</span>
             </div>
-            <div class="panel-body">
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button id="btn_arm" class="btn btn-arm" onclick="sendFlightCommand('ARM')">ARM</button>
-                    <button id="btn_disarm" class="btn btn-danger" onclick="sendFlightCommand('DISARM')">DISARM</button>
+            <div class="panel-body" style="font-size:11px;line-height:1.6;color:var(--text-2);">
+                <div>🎮 <b>Flight Pilot:</b> Manual RC (MC6C 2.4GHz)</div>
+                <div>✈️ <b>Quadcopter:</b> 5-inch / MT2204 / ESC 55A</div>
+                <div>📦 <b>Payload:</b> Realtek BW16 Standalone</div>
+                <div>📡 <b>Field Network:</b> Mobile 4G Hotspot MQTT</div>
+                <div style="margin-top:8px;padding:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;color:#38bdf8;font-weight:600;font-size:10px;">
+                    ⚡ Lái máy bay & cất/hạ cánh trực tiếp bằng tay cầm vô tuyến MC6C. Web Dashboard chỉ dùng để giám sát cảm biến môi trường và điều khiển thả chốt Servo!
                 </div>
-                <!-- Altitude Control -->
-                <div class="sec" style="display:flex;align-items:center;justify-content:space-between;">
-                    <span>Takeoff Altitude</span>
-                    <span id="alt_display" style="font-size:11px;font-weight:700;color:var(--accent);">10 m</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                    <input type="range" id="alt_slider" min="1" max="50" value="10" step="1"
-                        style="flex:1;accent-color:var(--accent);cursor:pointer;"
-                        oninput="updateAltDisplay(this.value)">
-                    <input type="number" id="alt_input" value="10" min="1" max="50" step="1"
-                        style="width:48px;padding:3px 5px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);font-size:12px;text-align:center;"
-                        oninput="syncAltSlider(this.value)">
-                </div>
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button id="btn_takeoff" class="btn btn-takeoff" onclick="sendFlightCommand('TAKEOFF')">TAKEOFF</button>
-                    <button id="btn_land" class="btn btn-danger" onclick="sendFlightCommand('LAND')">LAND</button>
-                </div>
-                <button class="btn btn-primary btn-full" style="margin-bottom:4px;font-size:10px;" onclick="sendSetAlt()">✈ SET ALTITUDE (Flying)</button>
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button id="btn_rtl" class="btn btn-warning" onclick="sendFlightCommand('RTL')">RTL</button>
-                    <button id="btn_reset" class="btn btn-secondary" onclick="sendFlightCommand('RESET_FLIGHT')">GUIDED</button>
-                </div>
-                <div class="sec">Stabilization</div>
-                <div class="btn-g3" style="margin-bottom:4px;">
-                    <button class="btn btn-primary" onclick="sendFlightCommand('LOITER')" style="font-size:10px;">LOITER</button>
-                    <button class="btn btn-secondary" onclick="sendFlightCommand('ALT_HOLD')" style="font-size:10px;">ALT HOLD</button>
-                    <button class="btn btn-secondary" onclick="sendFlightCommand('STABILIZE')" style="font-size:10px;">STAB</button>
-                </div>
-                <div class="sec">Waypoint Mission</div>
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button class="btn btn-primary" onclick="sendMissionCommand('START')">START</button>
-                    <button class="btn btn-secondary" onclick="sendMissionCommand('PAUSE')">PAUSE</button>
-                </div>
-                <div class="sec danger">Emergency</div>
-                <button class="btn btn-danger btn-full" onclick="sendFlightCommand('RECOVERY')" style="font-weight:700;">FAILSAFE RECOVERY</button>
             </div>
         </div>
 
-        <!-- Payload -->
+        <!-- Payload Control -->
         <div class="panel">
             <div class="panel-header">
                 <div class="panel-title">Payload Control</div>
@@ -366,50 +334,6 @@
                     <button class="btn btn-secondary" onclick="sendServoCommand(0)">Close 0°</button>
                 </div>
                 <button class="btn btn-secondary btn-full" onclick="sendPayloadCommand('RESET')">Reset Onboard</button>
-            </div>
-        </div>
-
-        <!-- SITL Simulation -->
-        <div class="panel">
-            <div class="panel-header">
-                <div class="panel-title">SITL Simulation</div>
-                <span class="tag tag-gray">SIM_*</span>
-            </div>
-            <div class="panel-body">
-                <div class="sec">Wind Speed</div>
-                <span class="wind-val" id="wind_val_display">0 m/s</span>
-                <input type="range" id="wind_slider" min="0" max="25" step="1" value="0" oninput="sendWindSpeed(this.value)">
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button class="btn btn-secondary" onclick="document.getElementById('wind_slider').value=0;sendWindSpeed(0)">Calm</button>
-                    <button class="btn btn-warning" onclick="document.getElementById('wind_slider').value=15;sendWindSpeed(15)">Storm</button>
-                </div>
-                <div class="sec">Turbulence</div>
-                <input type="range" id="turb_slider" min="0" max="10" step="1" value="0"
-                       oninput="sendSimParam('SIM_WIND_TURB', this.value); document.getElementById('turb_val').innerText = this.value;">
-                <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-3);">
-                    <span>Level: <span id="turb_val">0</span></span><span>Max: 10</span>
-                </div>
-                <div class="sec">Motor Failure</div>
-                <div class="btn-g4" style="margin-bottom:4px;">
-                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 1)">M1</button>
-                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 2)">M2</button>
-                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 3)">M3</button>
-                    <button class="btn btn-danger" style="font-size:10px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 4)">M4</button>
-                </div>
-                <button class="btn btn-success btn-full" style="margin-bottom:4px;" onclick="sendSimParam('SIM_ENGINE_FAIL', 0)">Restore All Motors</button>
-                <div class="sec">GPS Glitch</div>
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button class="btn btn-danger" onclick="sendSimParam('SIM_GPS_DISABLE', 1)">Kill GPS</button>
-                    <button class="btn btn-success" onclick="sendSimParam('SIM_GPS_DISABLE', 0)">GPS On</button>
-                </div>
-                <div class="sec">Geofence</div>
-                <div id="geo_status" style="font-size:9px;font-weight:600;color:var(--text-3);margin-bottom:5px;">Off</div>
-                <div class="btn-g2" style="margin-bottom:4px;">
-                    <button class="btn btn-warning" onclick="enableGeofence()">Enable</button>
-                    <button class="btn btn-secondary" onclick="disableGeofence()">Disable</button>
-                </div>
-                <div class="sec">Reset</div>
-                <button class="btn btn-secondary btn-full" onclick="resetAllSim()">Reset All SITL</button>
             </div>
         </div>
 
