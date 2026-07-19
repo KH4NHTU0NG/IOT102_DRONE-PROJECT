@@ -25,7 +25,7 @@
     const co2El       = document.getElementById('co2_value');
     const alertEl     = document.getElementById('alert_value');
     const rssiEl      = document.getElementById('rssi_value');
-    const sonarEl     = document.getElementById('sonar_value');
+    const servoEl     = document.getElementById('servo_value');
 
     /* State */
     let client           = null;
@@ -380,13 +380,9 @@
             }
 
             if (d.rssi != null) rssiEl.textContent = d.rssi;
-            if (d.distance != null) {
-                sonarEl.textContent = d.distance >= 0 ? d.distance.toFixed(1) : 'ERR';
-                if (d.distance >= 0 && d.distance < 50) {
-                    sonarEl.style.color = '#ef4444'; // Danger red if too close
-                } else {
-                    sonarEl.style.color = 'var(--cyan)';
-                }
+            if (d.servo != null && servoEl) {
+                servoEl.textContent = d.servo;
+                servoEl.style.color = d.servo > 45 ? '#f59e0b' : 'var(--cyan)';
             }
 
             // === [ENV-MAP] Cập nhật biến toàn cục cho bản đồ màu ===
