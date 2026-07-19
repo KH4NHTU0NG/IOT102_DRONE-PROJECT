@@ -7,7 +7,7 @@
     <meta name="description" content="Drone-based Environmental Monitoring Dashboard — Real Flight IRL Mode">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -278,7 +278,7 @@ function log(msg) {
 function toggleConnection() {
     if (isConnected) { if (client) client.disconnect(); return; }
 
-    if (typeof Paho === 'undefined') {
+    if (typeof Paho === 'undefined' || (!Paho.MQTT && !Paho.Client)) {
         log('ERROR: Paho MQTT library chưa load xong! Hãy kiểm tra mạng Internet.');
         alert('Lỗi: Thư viện MQTT chưa tải xong.\nHãy kiểm tra kết nối Internet rồi F5 tải lại trang.');
         return;
@@ -290,7 +290,8 @@ function toggleConnection() {
         var clientId = 'WebGCS_' + Math.random().toString(16).substr(2, 6);
 
         // Tham số thứ 3 là path '/mqtt' — BẮT BUỘC cho HiveMQ WebSocket
-        client = new Paho.MQTT.Client(host, port, '/mqtt', clientId);
+        var MQTTClient = (Paho.MQTT && Paho.MQTT.Client) || Paho.Client;
+        client = new MQTTClient(host, port, '/mqtt', clientId);
         client.onConnectionLost = function(r) {
             isConnected = false; updateUI();
             log('MQTT Disconnected: ' + (r.errorMessage || 'Unknown'));
@@ -331,7 +332,8 @@ function updateUI() {
 // === Payload Commands ===
 function sendPayloadCommand(cmd) {
     if (!isConnected || !client) { log('Not connected!'); return; }
-    var m = new Paho.MQTT.Message(JSON.stringify({command: cmd}));
+    var MQTTMsg = (Paho.MQTT && Paho.MQTT.Message) || Paho.Message;
+    var m = new MQTTMsg(JSON.stringify({command: cmd}));
     m.destinationName = 'iot102_drone/control/payload';
     client.send(m);
     log('[CMD] Sent: ' + cmd);
@@ -339,7 +341,8 @@ function sendPayloadCommand(cmd) {
 
 function sendServoCommand(angle) {
     if (!isConnected || !client) { log('Not connected!'); return; }
-    var m = new Paho.MQTT.Message(JSON.stringify({command: 'SERVO', angle: parseInt(angle)}));
+    var MQTTMsg = (Paho.MQTT && Paho.MQTT.Message) || Paho.Message;
+    var m = new MQTTMsg(JSON.stringify({command: 'SERVO', angle: parseInt(angle)}));
     m.destinationName = 'iot102_drone/control/payload';
     client.send(m);
     document.getElementById('servo_angle_display').textContent = angle;
