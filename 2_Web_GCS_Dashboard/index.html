@@ -277,28 +277,42 @@ function log(msg) {
 // === MQTT Connect/Disconnect (Luôn sẵn sàng ngay khi trang mở) ===
 function toggleConnection() {
     if (isConnected) { if (client) client.disconnect(); return; }
-    var host = document.getElementById('mqtt_host').value;
-    var port = parseInt(document.getElementById('mqtt_port').value);
-    var clientId = 'WebGCS_' + Math.random().toString(16).substr(2, 6);
 
-    client = new Paho.MQTT.Client(host, port, clientId);
-    client.onConnectionLost = function(r) {
-        isConnected = false; updateUI();
-        log('MQTT Disconnected: ' + (r.errorMessage || 'Unknown'));
-    };
-    client.onMessageArrived = onMessage;
-    log('Connecting to ' + host + ':' + port + '...');
+    if (typeof Paho === 'undefined') {
+        log('ERROR: Paho MQTT library chưa load xong! Hãy kiểm tra mạng Internet.');
+        alert('Lỗi: Thư viện MQTT chưa tải xong.\nHãy kiểm tra kết nối Internet rồi F5 tải lại trang.');
+        return;
+    }
 
-    client.connect({
-        onSuccess: function() {
-            isConnected = true; updateUI();
-            client.subscribe('iot102_drone/payload/sensors');
-            log('[MQTT] Connected OK! Subscribed to sensors.');
-        },
-        onFailure: function(e) {
-            log('[MQTT] Failed: ' + (e.errorMessage || 'Connection refused'));
-        }
-    });
+    try {
+        var host = document.getElementById('mqtt_host').value;
+        var port = parseInt(document.getElementById('mqtt_port').value);
+        var clientId = 'WebGCS_' + Math.random().toString(16).substr(2, 6);
+
+        // Tham số thứ 3 là path '/mqtt' — BẮT BUỘC cho HiveMQ WebSocket
+        client = new Paho.MQTT.Client(host, port, '/mqtt', clientId);
+        client.onConnectionLost = function(r) {
+            isConnected = false; updateUI();
+            log('MQTT Disconnected: ' + (r.errorMessage || 'Unknown'));
+        };
+        client.onMessageArrived = onMessage;
+        log('Connecting to ' + host + ':' + port + '/mqtt ...');
+
+        client.connect({
+            onSuccess: function() {
+                isConnected = true; updateUI();
+                client.subscribe('iot102_drone/payload/sensors');
+                log('[MQTT] Connected OK! Subscribed to sensors.');
+            },
+            onFailure: function(e) {
+                log('[MQTT] Failed: ' + (e.errorMessage || 'Connection refused'));
+            },
+            timeout: 10
+        });
+    } catch(err) {
+        log('ERROR: ' + err.message);
+        alert('Lỗi kết nối: ' + err.message);
+    }
 }
 
 function updateUI() {
