@@ -264,121 +264,136 @@
 </div>
 
 <script>
-(function(){
-    // === DOM Elements ===
-    const btnConnect  = document.getElementById('btn_connect');
-    const btnConnect2 = document.getElementById('btn_connect_2');
-    const statusBadge = document.getElementById('status_badge');
-    const statusText  = document.getElementById('status_text');
-    const tempEl  = document.getElementById('temp_value');
-    const humEl   = document.getElementById('hum_value');
-    const co2El   = document.getElementById('co2_value');
-    const alertEl = document.getElementById('alert_value');
-    const rssiEl  = document.getElementById('rssi_value');
-    const servoEl = document.getElementById('servo_value');
-    const logEl   = document.getElementById('log_console');
+// === Global State ===
+var client = null, isConnected = false;
+var chartTemp = null, chartHum = null, chartCo2 = null, chartRssi = null;
+var MAX_PTS = 40;
 
-    let client = null, isConnected = false;
+function log(msg) {
+    var el = document.getElementById('log_console');
+    if (el) el.value = '[' + new Date().toLocaleTimeString('vi-VN') + '] ' + msg;
+}
 
-    function log(msg) {
-        const t = new Date().toLocaleTimeString('vi-VN');
-        logEl.value = `[${t}] ${msg}`;
-    }
+// === MQTT Connect/Disconnect (Luôn sẵn sàng ngay khi trang mở) ===
+function toggleConnection() {
+    if (isConnected) { if (client) client.disconnect(); return; }
+    var host = document.getElementById('mqtt_host').value;
+    var port = parseInt(document.getElementById('mqtt_port').value);
+    var clientId = 'WebGCS_' + Math.random().toString(16).substr(2, 6);
 
-    // === Chart.js Setup ===
-    const MAX_PTS = 40;
-    function makeChart(canvasId, color, min, max) {
-        return new Chart(document.getElementById(canvasId), {
-            type: 'line',
-            data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: color + '15', tension: 0.3 }] },
-            options: { responsive: true, maintainAspectRatio: false, animation: false,
-                plugins: { legend: { display: false } },
-                scales: { x: { display: false }, y: { display: true, min: min, max: max, ticks: { font: { size: 9 }, color: '#4a6278', maxTicksLimit: 4 }, grid: { color: '#1e2d3d' } } }
-            }
-        });
-    }
-    const chartTemp = makeChart('chart_temp', '#fb923c', 15, 50);
-    const chartHum  = makeChart('chart_hum',  '#38bdf8', 0, 100);
-    const chartCo2  = makeChart('chart_co2',  '#fbbf24', 0, 1024);
-    const chartRssi = makeChart('chart_rssi', '#a78bfa', -100, 0);
-
-    function pushChart(chart, val, noDataId) {
-        const nd = document.getElementById(noDataId);
-        if (nd) nd.style.display = 'none';
-        const t = new Date().toLocaleTimeString('vi-VN');
-        chart.data.labels.push(t);
-        chart.data.datasets[0].data.push(val);
-        if (chart.data.labels.length > MAX_PTS) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
-        chart.update('none');
-    }
-
-    // === MQTT ===
-    window.toggleConnection = function() {
-        if (isConnected) { if (client) client.disconnect(); return; }
-        const host = document.getElementById('mqtt_host').value;
-        const port = parseInt(document.getElementById('mqtt_port').value);
-        const clientId = 'WebGCS_' + Math.random().toString(16).substr(2, 6);
-        client = new Paho.MQTT.Client(host, port, clientId);
-        client.onConnectionLost = function(r) {
-            isConnected = false; updateUI();
-            log('MQTT Disconnected: ' + r.errorMessage);
-        };
-        client.onMessageArrived = onMessage;
-        log('Connecting to ' + host + ':' + port + '...');
-        client.connect({
-            onSuccess: function() {
-                isConnected = true; updateUI();
-                client.subscribe('iot102_drone/payload/sensors');
-                log('[MQTT] Connected! Subscribed to sensors topic.');
-            },
-            onFailure: function(e) { log('[MQTT] Connect failed: ' + e.errorMessage); }
-        });
+    client = new Paho.MQTT.Client(host, port, clientId);
+    client.onConnectionLost = function(r) {
+        isConnected = false; updateUI();
+        log('MQTT Disconnected: ' + (r.errorMessage || 'Unknown'));
     };
+    client.onMessageArrived = onMessage;
+    log('Connecting to ' + host + ':' + port + '...');
 
-    function updateUI() {
-        statusBadge.className = 'status ' + (isConnected ? 'ok' : 'err');
-        statusText.textContent = isConnected ? 'Online' : 'Offline';
-        const label = isConnected ? 'Disconnect' : 'Connect';
-        const cls   = isConnected ? 'btn btn-disconnect' : 'btn btn-connect';
-        btnConnect.textContent = label;  btnConnect.className = cls;
-        btnConnect2.textContent = label; btnConnect2.className = cls + ' btn-full';
+    client.connect({
+        onSuccess: function() {
+            isConnected = true; updateUI();
+            client.subscribe('iot102_drone/payload/sensors');
+            log('[MQTT] Connected OK! Subscribed to sensors.');
+        },
+        onFailure: function(e) {
+            log('[MQTT] Failed: ' + (e.errorMessage || 'Connection refused'));
+        }
+    });
+}
+
+function updateUI() {
+    var badge = document.getElementById('status_badge');
+    var text  = document.getElementById('status_text');
+    var btn1  = document.getElementById('btn_connect');
+    var btn2  = document.getElementById('btn_connect_2');
+    badge.className = 'status ' + (isConnected ? 'ok' : 'err');
+    text.textContent = isConnected ? 'Online' : 'Offline';
+    var label = isConnected ? 'Disconnect' : 'Connect';
+    var cls   = isConnected ? 'btn btn-disconnect' : 'btn btn-connect';
+    btn1.textContent = label; btn1.className = cls;
+    btn2.textContent = label; btn2.className = cls + ' btn-full';
+}
+
+// === Payload Commands ===
+function sendPayloadCommand(cmd) {
+    if (!isConnected || !client) { log('Not connected!'); return; }
+    var m = new Paho.MQTT.Message(JSON.stringify({command: cmd}));
+    m.destinationName = 'iot102_drone/control/payload';
+    client.send(m);
+    log('[CMD] Sent: ' + cmd);
+}
+
+function sendServoCommand(angle) {
+    if (!isConnected || !client) { log('Not connected!'); return; }
+    var m = new Paho.MQTT.Message(JSON.stringify({command: 'SERVO', angle: parseInt(angle)}));
+    m.destinationName = 'iot102_drone/control/payload';
+    client.send(m);
+    document.getElementById('servo_angle_display').textContent = angle;
+    document.getElementById('servo_slider').value = angle;
+    log('[SERVO] Angle: ' + angle + '°');
+}
+
+// === Sensor Data Handler ===
+function onMessage(msg) {
+    try {
+        var d = JSON.parse(msg.payloadString);
+        var tempEl  = document.getElementById('temp_value');
+        var humEl   = document.getElementById('hum_value');
+        var co2El   = document.getElementById('co2_value');
+        var alertEl = document.getElementById('alert_value');
+        var rssiEl  = document.getElementById('rssi_value');
+        var servoEl = document.getElementById('servo_value');
+
+        if (d.temp != null)     { tempEl.textContent = d.temp.toFixed(1); pushChart(chartTemp, d.temp, 'no_data_temp'); document.getElementById('chart_temp_latest').textContent = d.temp.toFixed(1) + '°C'; }
+        if (d.humidity != null) { humEl.textContent = d.humidity.toFixed(0); pushChart(chartHum, d.humidity, 'no_data_hum'); document.getElementById('chart_hum_latest').textContent = d.humidity.toFixed(0) + '%'; }
+        if (d.co2 != null)      { co2El.textContent = d.co2; pushChart(chartCo2, d.co2, 'no_data_co2'); document.getElementById('chart_co2_latest').textContent = d.co2; }
+        if (d.rssi != null)     { rssiEl.textContent = d.rssi; pushChart(chartRssi, d.rssi, 'no_data_rssi'); document.getElementById('chart_rssi_latest').textContent = d.rssi + ' dBm'; }
+        if (d.servo != null)    { servoEl.textContent = d.servo; servoEl.style.color = d.servo > 45 ? '#f59e0b' : '#22d3ee'; }
+        if (d.alert != null) {
+            var isAlert = (d.alert === 1);
+            alertEl.textContent = isAlert ? 'DANGER' : 'SAFE';
+            alertEl.style.color = isAlert ? '#f87171' : '#22d3a4';
+            document.getElementById('card_alert').classList.toggle('alert', isAlert);
+        }
+    } catch(e) { log('JSON parse error'); }
+}
+
+function pushChart(chart, val, noDataId) {
+    if (!chart) return;
+    var nd = document.getElementById(noDataId);
+    if (nd) nd.style.display = 'none';
+    var t = new Date().toLocaleTimeString('vi-VN');
+    chart.data.labels.push(t);
+    chart.data.datasets[0].data.push(val);
+    if (chart.data.labels.length > MAX_PTS) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
+    chart.update('none');
+}
+
+// === Chart.js Init (try-catch để nút Connect luôn hoạt động dù CDN chậm) ===
+function makeChart(canvasId, color, yMin, yMax) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas || typeof Chart === 'undefined') return null;
+    return new Chart(canvas, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: color + '15', tension: 0.3 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { display: false }, y: { display: true, min: yMin, max: yMax, ticks: { font: { size: 9 }, color: '#4a6278', maxTicksLimit: 4 }, grid: { color: '#1e2d3d' } } }
+        }
+    });
+}
+
+window.addEventListener('load', function() {
+    try {
+        chartTemp = makeChart('chart_temp', '#fb923c', 15, 50);
+        chartHum  = makeChart('chart_hum',  '#38bdf8', 0, 100);
+        chartCo2  = makeChart('chart_co2',  '#fbbf24', 0, 1024);
+        chartRssi = makeChart('chart_rssi', '#a78bfa', -100, 0);
+        log('Dashboard ready. Press Connect to start.');
+    } catch(e) {
+        log('Charts init skipped — CDN loading...');
     }
-
-    function onMessage(msg) {
-        try {
-            const d = JSON.parse(msg.payloadString);
-            if (d.temp != null) { tempEl.textContent = d.temp.toFixed(1); pushChart(chartTemp, d.temp, 'no_data_temp'); document.getElementById('chart_temp_latest').textContent = d.temp.toFixed(1) + '°C'; }
-            if (d.humidity != null) { humEl.textContent = d.humidity.toFixed(0); pushChart(chartHum, d.humidity, 'no_data_hum'); document.getElementById('chart_hum_latest').textContent = d.humidity.toFixed(0) + '%'; }
-            if (d.co2 != null) { co2El.textContent = d.co2; pushChart(chartCo2, d.co2, 'no_data_co2'); document.getElementById('chart_co2_latest').textContent = d.co2; }
-            if (d.rssi != null) { rssiEl.textContent = d.rssi; pushChart(chartRssi, d.rssi, 'no_data_rssi'); document.getElementById('chart_rssi_latest').textContent = d.rssi + ' dBm'; }
-            if (d.servo != null) { servoEl.textContent = d.servo; servoEl.style.color = d.servo > 45 ? '#f59e0b' : '#22d3ee'; }
-            if (d.alert != null) {
-                const isAlert = d.alert === 1;
-                alertEl.textContent = isAlert ? 'DANGER' : 'SAFE';
-                alertEl.style.color = isAlert ? '#f87171' : '#22d3a4';
-                document.getElementById('card_alert').classList.toggle('alert', isAlert);
-            }
-        } catch(e) { log('JSON parse error'); }
-    }
-
-    // === Payload Commands ===
-    window.sendPayloadCommand = function(cmd) {
-        if (!isConnected || !client) { log('Not connected!'); return; }
-        const msg = new Paho.MQTT.Message(JSON.stringify({command: cmd}));
-        msg.destinationName = 'iot102_drone/control/payload';
-        client.send(msg);
-        log('[CMD] Sent: ' + cmd);
-    };
-    window.sendServoCommand = function(angle) {
-        if (!isConnected || !client) { log('Not connected!'); return; }
-        const msg = new Paho.MQTT.Message(JSON.stringify({command: 'SERVO', angle: parseInt(angle)}));
-        msg.destinationName = 'iot102_drone/control/payload';
-        client.send(msg);
-        document.getElementById('servo_angle_display').textContent = angle;
-        document.getElementById('servo_slider').value = angle;
-        log('[SERVO] Angle: ' + angle + '°');
-    };
-})();
+});
 </script>
 </body>
 </html>
