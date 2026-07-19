@@ -254,7 +254,7 @@
                     </div>
                     <div class="field">
                         <label>Port (WebSocket)</label>
-                        <input type="number" id="mqtt_port" value="8000">
+                        <input type="number" id="mqtt_port" value="8884">
                     </div>
                     <button id="btn_connect_2" class="btn btn-connect btn-full" onclick="toggleConnection()">Connect</button>
                 </div>
@@ -299,7 +299,9 @@ function toggleConnection() {
         client.onMessageArrived = onMessage;
         log('Connecting to ' + host + ':' + port + '/mqtt ...');
 
+        var use_ssl = (port === 8884 || port === 443);
         client.connect({
+            useSSL: use_ssl,
             onSuccess: function() {
                 isConnected = true; updateUI();
                 client.subscribe('iot102_drone/payload/sensors');
