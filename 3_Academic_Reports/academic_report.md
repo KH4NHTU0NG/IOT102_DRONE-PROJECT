@@ -1,207 +1,174 @@
-# BÁO CÁO KỸ THUẬT: HỆ THỐNG GIÁM SÁT MÔI TRƯỜNG DÙNG DRONE VÀ CÔNG NGHỆ IoT
+# BÁO CÁO KỸ THUẬT: HỆ THỐNG GIÁM SÁT MÔI TRƯỜNG & ĐIỀU KHIỂN TẢI TRỌNG UAV THÔNG MINH SỬ DỤNG CÔNG NGHỆ IoT VÀ CLOUD MQTT
+*Quy chuẩn kỹ thuật cho triển khai bay thật ngoài trời (In-Real-Life Field Deployment — `IRL_test` Branch)*
 
-> [!NOTE]  
-> Báo cáo này trình bày thiết kế kiến trúc kỹ thuật và giải thuật tích hợp dữ liệu của hệ thống giám sát môi trường thời gian thực, kết hợp thiết bị phần cứng BW16, phần mềm mô phỏng bay ArduPilot SITL, và các công cụ lưu trữ, trực quan hóa dữ liệu công nghiệp.
-
----
-
-## 1. Sơ đồ kết nối phần cứng (Pinout & Wiring Diagram)
-
-Để thu thập dữ liệu môi trường, thiết bị phần cứng đầu cuối sử dụng vi điều khiển RTL8720DN (AmebaD board BW16) kết nối với các cảm biến DHT22 (Nhiệt độ & Độ ẩm), MQ-135 (Chất lượng không khí/CO2), và một còi báo động (Passive Buzzer).
-
-| Thiết bị | Chân BW16 | Loại Chân | Ghi chú Kỹ thuật |
-| :--- | :--- | :--- | :--- |
-| **DHT22 (VCC)** | 3.3V | Cấp nguồn | Cấp nguồn 3.3V từ board BW16. |
-| **DHT22 (GND)** | GND | Nối đất | Nối đất chung. |
-| **DHT22 (DATA)** | `PA_26` | GPIO Input | **BẮT BUỘC** gắn thêm một điện trở Pull-up \(10\text{ k}\Omega\) nối lên nguồn 3.3V để ổn định tín hiệu 1-Wire. [1] |
-| **MQ-135 (VCC)** | 5V | Cấp nguồn | **BẮT BUỘC** cấp nguồn 5V từ nguồn ngoài (hoặc cổng USB) vì cảm biến MQ-135 cần nhiệt năng cho màng nung, nguồn 3.3V của BW16 không đủ dòng. |
-| **MQ-135 (GND)** | GND | Nối đất | Nối đất chung giữa nguồn ngoài và board BW16. |
-| **MQ-135 (AOUT)** | `PB_1` | ADC Input | Cổng analog đọc giá trị thô từ \(0 \rightarrow 4095\) (ADC 12-bit). Cần sử dụng mạch chia điện áp (10k / 10k) để giảm điện áp ngõ ra của cảm biến từ 5V về dưới 3.3V bảo vệ chip. |
-| **Buzzer (+)** | `PA_0` | GPIO Output | **LƯU Ý**: GPIO của BW16 chỉ có khả năng cấp dòng tối đa \(\sim 8\text{ mA}\). Do đó cần sử dụng một Transistor NPN 2N2222 để khuếch đại dòng điện kích còi. |
-| **Buzzer (-)** | GND | Nối đất | Nối đất chung qua chân E của Transistor. |
-| **Warning LED** | `PA_12` | GPIO Output | Đèn LED đỏ bật sáng cảnh báo khi nồng độ CO2 vượt ngưỡng. |
+> [!IMPORTANT]  
+> **Tóm tắt Nghiên cứu:** Báo cáo này trình bày kiến trúc thiết kế và giải thuật vận hành của một **Hộp Tải Trọng IoT Thông Minh (Smart IoT Payload Box)** gắn trên máy bay không người lái (Quadcopter 5-inch). Hệ thống hoạt động theo mô hình **Hai tầng độc lập (Dual-Layer Architecture)** nhằm phân tách tuyệt đối giữa tầng an toàn bay vô tuyến 2.4GHz và tầng giám sát môi trường IoT không dây, đảm bảo độ tin cậy, không trễ thời gian thực và an toàn tối đa khi thực chiến ngoài thực địa.
 
 ---
 
-## 2. Kiến trúc Hệ thống (Block Diagram)
+## 1. Sơ đồ kết nối phần cứng Payload (Pinout & Wiring Diagram)
 
-Hệ thống được thiết kế theo mô hình kiến trúc 6 lớp từ cảm biến phần cứng đến lớp hiển thị của người dùng:
+Để thu thập chỉ số môi trường và điều khiển cơ cấu thả hàng cứu trợ, thiết bị phần cứng đầu cuối sử dụng vi điều khiển băng tần kép **Realtek Ameba BW16 (RTL8720DN)** kết nối với cụm cảm biến môi trường, màn hình OLED và động cơ Servo HW-PWM.
+
+| Thiết Bị / Cảm Biến | Chân Kết Nối BW16 | Điện Áp | Chuẩn Giao Tiếp | Ghi Chú Kỹ Thuật & Yêu Cầu Thiết Kế |
+| :--- | :--- | :--- | :--- | :--- |
+| **DHT22 (VCC)** | `3.3V` / `5V` | 3.3V - 5V | Cấp nguồn | Cấp nguồn từ dải nguồn chung trên Breadboard. |
+| **DHT22 (GND)** | `GND` | Mass | Nối đất | Nối đất chung toàn hệ thống. |
+| **DHT22 (DATA)** | `PA30` (`PA_30`) | GPIO Input | One-Wire | **BẮT BUỘC** sử dụng điện trở Pull-up \(10\text{ k}\Omega\) nối lên nguồn 3.3V để ổn định xung nhịp tín hiệu 1-Wire khi máy bay bay ở tốc độ cao [1]. |
+| **MQ-135 (VCC)** | `VIN` (`5V`) | 5V chuẩn | Cấp nguồn | **BẮT BUỘC** cấp điện áp chuẩn 5V (lấy từ mạch UBEC hoặc Flight Controller qua chân `VIN`). Nguồn 3.3V của vi điều khiển không đủ nhiệt năng cho màng nung cảm biến. |
+| **MQ-135 (GND)** | `GND` | Mass | Nối đất | Nối đất chung. |
+| **MQ-135 (AOUT)** | `PB3` (`PB_3`) | ADC Input | Analog (12-bit) | Đọc giá trị thô chất lượng không khí từ \(0 \rightarrow 4095\). Chỉ số `< 600 ADC` được quy chuẩn là An toàn (`SAFE`), `> 600 ADC` cảnh báo Ô nhiễm/Khí Gas (`DANGER`). |
+| **HC-SR04 (TRIG)** | `PB2` (`PB_2`) | GPIO Output | Ultrasonic | Phát xung kích siêu âm `10us` xuống mặt đất để đo độ cao thực tế của bụng máy bay lúc thả hàng. |
+| **HC-SR04 (ECHO)** | `PB1` (`PB_1`) | GPIO Input | Ultrasonic | Thu xung phản hồi từ mặt đất. Đo độ cao chính xác trong phạm vi `< 250 cm`. |
+| **OLED SSD1306 (SDA)**| `PA26` (`PA_26`) | 3.3V | I2C (`0x3C`) | Đường dữ liệu nối tiếp I2C hiển thị thông số trực tiếp trên vỏ hộp Payload tại sân bay. |
+| **OLED SSD1306 (SCL)**| `PA25` (`PA_25`) | 3.3V | I2C (`0x3C`) | Đường xung nhịp nối tiếp I2C. |
+| **Servo SG90 (SIG)** | `PA13` (`PA_13`) | 5V | Hardware PWM | Sử dụng bộ đếm Hardware PWM (`pwmout_api`) để điều khiển góc xoay `0° - 180°` chốt thả hàng, loại bỏ hiện tượng nhiễu xung do sóng WiFi gây ra [2]. |
+| **Buzzer (+)** | `PA14` (`PA_14`) | 3.3V | GPIO Output | Còi hú Active LOW/HIGH báo động khi môi trường vượt ngưỡng nguy hiểm hoặc phát âm thanh tìm định vị máy bay ngoài sân. |
+| **LED Cảnh báo Red** | `PA15` (`PA_15`) | 3.3V | GPIO Output | Đèn báo đỏ sáng rực khi phát hiện khí Gas vượt ngưỡng hoặc nhiệt độ `> 40°C`. |
+| **LED Trạng thái Blue**| `PA27` (`PA_27`) | 3.3V | GPIO Output | Đèn báo trạng thái kết nối Cloud MQTT online ổn định. |
+
+---
+
+## 2. Kiến trúc Hệ thống Thực địa Hai Tầng (`Dual-Layer Field Architecture`)
+
+Nhằm giải quyết bài toán độ trễ và rủi ro mất kiểm soát khi vận hành UAV ngoài trời, hệ thống được thiết kế phân tách thành 2 tầng giao tiếp độc lập:
 
 ```mermaid
 graph TD
-    subgraph Lớp_Cảm_Biến [1. Lớp Cảm Biến]
-        DHT22[Cảm biến DHT22]
-        MQ135[Cảm biến MQ-135]
+    subgraph Flight_Layer ["1. TẦNG ĐỘNG LỰC & AN TOÀN BAY (FLIGHT CONTROL LAYER — 2.4GHz Radio)"]
+        RC_TX["Tay cầm điều khiển<br>Microzone MC6C"] <-->|Sóng vô tuyến 2.4GHz / S.BUS (< 10ms)| RX["Bộ thu sóng RX MC7REV2"]
+        RX --> FC["Flight Controller + ESC RuiBet 55A<br>+ 4x Motor MT2204 + Pin LiPo 4S 1800mAh"]
     end
 
-    subgraph Lớp_Phần_Cứng [2. Lớp Nhúng Đầu Cuối]
-        BW16[Board BW16 RTL8720DN]
+    subgraph IoT_Layer ["2. TẦNG GIÁM SÁT & TẢI TRỌNG IOT (PAYLOAD LAYER — 4G Cloud MQTT)"]
+        BW16["Hộp Payload Realtek Ameba BW16<br>(DHT22 + MQ135 + Sonar + OLED + Servo)"] <-->|WiFi 4G Personal Hotspot| Cloud["Public Cloud MQTT Broker<br>(broker.hivemq.com : 1883 / 8000)"]
+        Cloud <-->|WebSockets Port 8000| GCS["Web GCS Dashboard v3.3<br>(Laptop / Smartphone tại mặt đất)"]
     end
-
-    subgraph Lớp_Môi_Giới [3. Lớp Truyền Tin MQTT]
-        Broker[Mosquitto Broker port 1883 & 9001]
-    end
-
-    subgraph Lớp_Mô_Phỏng [Lớp Điều Khiển Bay]
-        SITL[ArduPilot SITL Copter]
-    end
-
-    subgraph Lớp_Gateway [4. Lớp Gateway tích hợp]
-        Fusion[Gateway fusion.py Python]
-    end
-
-    subgraph Lớp_Dữ_Liệu [5. Lớp Cơ sở Dữ liệu]
-        InfluxDB[(InfluxDB Time-series)]
-    end
-
-    subgraph Lớp_Ứng_Dụng [6. Lớp Trực Quan & Web]
-        Grafana[Grafana Dashboard]
-        WebControl[Web Control Interface index.html]
-    end
-
-    %% Luồng dữ liệu cảm biến
-    DHT22 -->|Nhiệt độ & Độ ẩm| BW16
-    MQ135 -->|Tín hiệu Analog| BW16
-    BW16 -->|Publish JSON qua TCP 1883| Broker
-    Broker -->|Subscribe Topic sensors| Fusion
-    
-    %% Luồng dữ liệu bay
-    SITL -->|MAVLink TCP 5763| Fusion
-    
-    %% Tích hợp và lưu trữ
-    Fusion -->|Ghi Point dữ liệu đồng bộ| InfluxDB
-    InfluxDB -->|Đọc Flux query| Grafana
-    
-    %% Luồng điều khiển Web
-    WebControl -->|Publish Flight/Payload Command qua WS 9001| Broker
-    Broker -->|Đọc lệnh bay| Fusion
-    Broker -->|Đọc lệnh còi/LED| BW16
-    Fusion -->|Gửi lệnh MAVLink| SITL
 ```
+
+### Phân tích ưu điểm kiến trúc:
+1. **Độc lập an toàn bay vô tuyến (`Flight Safety Isolation`):** Việc điều khiển bay (Cất cánh, giữ độ cao, di chuyển, hạ cánh khẩn cấp) được thực hiện qua giao thức vô tuyến S.BUS 2.4GHz với độ trễ cực thấp (`< 10ms`). Nếu mạng Internet 4G bị gián đoạn hay máy chủ MQTT Cloud gặp sự cố, phi công vẫn làm chủ hoàn toàn máy bay để hạ cánh an toàn.
+2. **Giám sát IoT thời gian thực trên nền tảng Đám mây (`Cloud Telemetry`):** Hộp tải trọng BW16 sử dụng kết nối WiFi 4G Hotspot độc lập để đóng gói dữ liệu cảm biến thành bản tin JSON và xuất bản (`Publish`) lên Public Cloud MQTT Broker (`broker.hivemq.com`) với tần suất `1000ms/lần`.
+3. **Điều khiển tải trọng theo thời gian thực (`Real-time Payload Actuation`):** Kỹ sư ngồi tại bàn điều khiển mặt đất có thể theo dõi biểu đồ cảm biến và nhấn nút lệnh mở/đóng Servo trên Web Dashboard (`index.html`). Lệnh được truyền qua WebSockets và MQTT xuống vi điều khiển BW16 để mở chốt thả hàng ngay lập tức.
 
 ---
 
-## 3. Sơ đồ tuần tự chu kỳ dữ liệu (Sequence Diagram)
+## 3. Sơ đồ tuần tự chu kỳ vận hành thực địa (Sequence Diagram)
 
-Dưới đây là sơ đồ tuần tự biểu diễn dòng dữ liệu cảm biến đi từ thiết bị đầu cuối đến cơ sở dữ liệu InfluxDB, đồng thời minh họa luồng điều khiển bay ngược từ trình duyệt về Drone:
+Dưới đây là sơ đồ tuần tự biểu diễn luồng tương tác song song giữa Tầng Lái Máy Bay và Tầng Giám Sát IoT trong một chuyến bay thực địa tiêu chuẩn:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant BW16 as Thiết bị BW16
-    participant Broker as Mosquitto Broker
-    participant Web as Trình duyệt (Web)
-    participant Gateway as Python Gateway (fusion.py)
-    participant SITL as Drone SITL (ArduPilot)
-    participant Influx as InfluxDB
+    participant Pilot as Phi Công (RC Pilot)
+    participant TX as Tay Cầm MC6C 2.4GHz
+    participant FC as Flight Controller & ESC
+    participant BW16 as Hộp Payload BW16
+    participant Cloud as HiveMQ Cloud Broker
+    participant Web as Web GCS Dashboard
 
-    %% Luồng Telemetry cảm biến
-    Note over BW16, Influx: Luồng dữ liệu Telemetry (Chu kỳ 2 giây)
-    BW16->>BW16: Đọc dữ liệu DHT22 & MQ-135
-    BW16->>Broker: Publish JSON tới drone/payload/sensors
-    Broker->>Gateway: Forward sensor_data
-    Broker->>Web: Forward sensor_data (Cập nhật UI live)
-    SITL->>Gateway: Phát MAVLink GLOBAL_POSITION_INT
-    Note over Gateway: Khóa state & Tích hợp (Loose Coupling)
-    Gateway->>Influx: Ghi bản ghi tích hợp (lat, lon, alt, temp, hum, co2, alert)
-    
-    %% Luồng điều khiển bay
-    Note over Web, SITL: Luồng điều khiển bay từ trình duyệt
-    Web->>Broker: Publish {"command":"TAKEOFF", "alt":10} tới drone/control/flight
-    Broker->>Gateway: Forward flight command
-    Gateway->>Gateway: Chuyển đổi lệnh bay sang MAVLink format
-    Gateway->>SITL: Gửi gói tin MAVLink (GUIDED Mode + ARM + TAKEOFF)
-    SITL->>SITL: Cất cánh lên độ cao 10m
+    Note over Pilot, FC: Giai đoạn 1: Khởi động & Cất cánh bằng sóng vô tuyến 2.4GHz
+    Pilot->>TX: Bật tay cầm MC6C (Throttle 0%, Disarmed)
+    Pilot->>FC: Cắm pin LiPo 4S vào máy bay
+    FC->>TX: Đồng bộ sóng S.BUS OK (Đèn RX sáng đứng)
+    Pilot->>TX: Gạt công tắc ARM & Đẩy Throttle cất cánh
+    FC->>FC: Điều khiển 4 Motor MT2204 giữ thăng bằng trên không
+
+    Note over BW16, Web: Giai đoạn 2: Giám sát Telemetry môi trường qua WiFi 4G Cloud MQTT
+    BW16->>BW16: Đọc DHT22, MQ-135, Sonar & hiển thị OLED
+    BW16->>Cloud: Publish JSON Telemetry (Topic: iot102_drone/payload/sensors)
+    Cloud->>Web: Push bản tin qua WebSockets (Port 8000)
+    Web->>Web: Cập nhật đồng hồ Gauge & Biểu đồ Chart.js realtime
+
+    Note over Web, BW16: Giai đoạn 3: Thực thi lệnh thả hàng từ xa qua Web Dashboard
+    Web->>Cloud: Publish lệnh mở Servo 90° (Topic: iot102_drone/control/payload)
+    Cloud->>BW16: Subscribe nhận bản tin lệnh {"command":"SERVO","angle":90}
+    BW16->>BW16: Xuất xung Hardware PWM PA13 xoay Servo SG90 mở chốt
+    BW16->>Cloud: Publish xác nhận trạng thái chốt đã mở
+    Web->>Web: Hiển thị thông báo "Servo Angle: 90°" & Còi Buzzer kêu báo hiệu
 ```
 
 ---
 
-## 4. Giải thích kỹ thuật: Giao thức MQTT
+## 4. Đặc tả giao thức bản tin MQTT (`MQTT Message Specification`)
 
-**MQTT (Message Queuing Telemetry Transport)** là một giao thức truyền thông điệp dạng Publish/Subscribe gọn nhẹ, chuẩn hóa bởi OASIS [2]. Khác với mô hình HTTP Request/Response truyền thống đòi hỏi thiết lập liên kết liên tục và overhead tiêu đề lớn, MQTT hoạt động thông qua một bên môi giới trung gian gọi là **Broker**.
+Hệ thống sử dụng định dạng JSON chuẩn hóa để truyền tải dữ liệu giữa mạch BW16 và Trạm mặt đất:
 
-*   **Topic Hierarchy (Cấu trúc phân cấp)**: Sử dụng các dấu gạch chéo `/` để phân tách không gian tên địa chỉ. Ví dụ trong dự án:
-    *   `drone/payload/sensors`: Dành cho dữ liệu telemetry cảm biến từ BW16.
-    *   `drone/control/payload`: Dành cho lệnh điều khiển còi/LED gửi tới BW16.
-    *   `drone/control/flight`: Dành cho lệnh điều khiển bay gửi tới Gateway chuyển tiếp sang Drone.
-*   **QoS (Quality of Service)**: Cung cấp 3 cấp độ:
-    *   **QoS 0 (At most once)**: Gửi tin nhắn nhanh nhất, không đảm bảo đến đích (phù hợp gửi telemetry cảm biến chu kỳ cao).
-    *   **QoS 1 (At least once)**: Đảm bảo tin nhắn đến đích ít nhất một lần (dùng cho các lệnh điều khiển bay quan trọng).
-    *   **QoS 2 (Exactly once)**: Đảm bảo tin nhắn đến đích đúng một lần duy nhất (độ trễ cao nhất).
-*   **Lý do lựa chọn**: MQTT có overhead tiêu đề cực nhỏ (chỉ từ \(2\text{ bytes}\)), tiêu thụ điện năng thấp, và hỗ trợ cơ chế tự reconnect rất tốt, cực kỳ tối ưu cho các thiết bị phần cứng kết nối không dây băng thông hẹp như board BW16.
-
----
-
-## 5. Giải thích kỹ thuật: Giao thức MAVLink
-
-**MAVLink (Micro Air Vehicle Link)** là một giao thức truyền thông điệp dạng Point-to-Point cực kỳ tối ưu dành cho các thiết bị bay không người lái (UAV) [3]. MAVLink mã hóa các cấu trúc dữ liệu nhị phân nhỏ gọn và truyền tải qua các giao thức mạng phổ biến như UDP/TCP hoặc kết nối Serial.
-
-Cấu trúc một gói tin MAVLink v2.0 tiêu chuẩn:
-
-| Trường | Độ dài | Mô tả |
-| :--- | :--- | :--- |
-| **STX** | 1 byte | Ký tự đánh dấu bắt đầu gói tin (MAVLink v2.0 là `0xFD`). |
-| **LEN** | 1 byte | Độ dài của phần Payload dữ liệu. |
-| **INC FLAGS / COMP FLAGS** | 2 bytes | Cờ tương thích và cờ ký số bảo mật. |
-| **SEQ** | 1 byte | Số thứ tự gói tin để phát hiện mất mát dữ liệu. |
-| **SYS ID** | 1 byte | ID của Drone gửi tin (ví dụ: 1). |
-| **COMP ID** | 1 byte | ID của linh kiện gửi tin (ví dụ: autopilot = 1). |
-| **MSG ID** | 3 bytes | ID định danh loại tin nhắn (0 - 16,777,215). |
-| **PAYLOAD** | 0-255 bytes | Dữ liệu nhị phân thực tế của gói tin. |
-| **CHECKSUM** | 2 bytes | Mã CRC kiểm tra tính toàn vẹn của gói tin. |
-
-Các gói tin cốt lõi được sử dụng trong dự án:
-1.  `GLOBAL_POSITION_INT` (MSG ID #33): Cung cấp kinh độ (lon), vĩ độ (lat), độ cao (alt), và vận tốc drone từ hệ thống định vị GPS và EKF.
-2.  `COMMAND_LONG` (MSG ID #76): Dùng để truyền các lệnh thực thi từ xa như `MAV_CMD_COMPONENT_ARM_DISARM` (Kích hoạt động cơ) hay `MAV_CMD_NAV_TAKEOFF` (Cất cánh lên độ cao mong muốn).
-
----
-
-## 6. Thuật toán tích hợp dữ liệu (Data Fusion Algorithm)
-
-Hệ thống sử dụng thuật toán tích hợp dữ liệu dạng **Timestamp-based Loose Coupling (Ghép nối lỏng dựa trên dấu thời gian)** [4]. Đây là phương pháp tối ưu đối với các hệ thống prototype không đồng bộ về mặt thời gian phần cứng giữa thiết bị IoT (BW16) và autopilot của Drone (ArduPilot).
-
+### 1. Bản tin Telemetry Cảm biến (`Sensor Telemetry JSON`)
+- **Topic:** `iot102_drone/payload/sensors`
+- **QoS:** `0` (At most once — ưu tiên tốc độ truyền cao nhất)
+- **Chu kỳ xuất bản:** `1000 ms` (1 Hz)
+- **Cấu trúc JSON Payload:**
+```json
+{
+  "temp": 28.5,
+  "humidity": 64.2,
+  "co2": 412,
+  "sonar": 85.0,
+  "servo": 0,
+  "status": "SAFE"
+}
 ```
-                 [Thread MQTT]          [Thread MAVLink]
-                       │                       │
-           Nhận cảm biến từ BW16        Nhận GPS từ SITL
-                       │                       │
-                       ▼                       ▼
-            Ghi đè sensor_data          Ghi đè gps_data
-                 (Shared State)          (Shared State)
-                       │                       │
-                       └───────────┬───────────┘
-                                   │
-                           [Loop Main (1s)]
-                                   │
-                         Đọc Snapshot dưới khóa
-                                   │
-                                   ▼
-                         Gộp bản ghi tổng hợp
-                                   │
-                                   ▼
-                             Ghi InfluxDB
+*Giải thích trường dữ liệu:*
+- `temp`: Nhiệt độ không khí (`°C`) đo bởi DHT22.
+- `humidity`: Độ ẩm tương đối (`%`) đo bởi DHT22.
+- `co2`: Giá trị ADC thô chất lượng không khí/khí Gas đo bởi MQ-135 (`0 - 4095`).
+- `sonar`: Khoảng cách thực tế từ bụng máy bay xuống đất (`cm`) đo bởi HC-SR04.
+- `servo`: Góc xoay hiện tại của chốt thả hàng (`0° - 180°`).
+- `status`: Trạng thái môi trường (`SAFE` hoặc `DANGER`).
+
+### 2. Bản tin Điều khiển Tải trọng (`Payload Control JSON`)
+- **Topic:** `iot102_drone/control/payload`
+- **QoS:** `1` (At least once — đảm bảo lệnh thả hàng chắc chắn tới nơi)
+- **Cấu trúc lệnh xoay Servo thả chốt:**
+```json
+{
+  "command": "SERVO",
+  "angle": 90
+}
+```
+- **Cấu trúc lệnh bật/tắt còi Buzzer & LED tìm máy bay:**
+```json
+{
+  "command": "BUZZER_ON"
+}
 ```
 
-### Cơ chế hoạt động:
-1.  Gateway khởi chạy 2 luồng nhận song song:
-    *   `mqtt_thread` liên tục cập nhật trạng thái cảm biến mới nhất nhận được từ cảm biến qua MQTT vào biến shared state `sensor_data`.
-    *   `mavlink_thread` liên tục cập nhật tọa độ GPS mới nhất từ luồng dữ liệu SITL vào biến shared state `gps_data`.
-2.  Để tránh xung đột tài nguyên giữa các tiến trình (Race Condition), hai biến shared state được bảo vệ nghiêm ngặt bằng cơ chế khóa loại trừ tương hỗ **Threading Lock** (\(L\)).
-3.  Vòng lặp chính (Main Loop) chạy đồng bộ với chu kỳ \(T_{main} = 1.0\text{ s}\), thực hiện chụp lại snapshot dữ liệu dưới sự bảo vệ của khóa \(L\):
-    \[S_k = \{ \mathbf{S}_{sensor}(t_{sensor}), \mathbf{S}_{gps}(t_{gps}) \}\]
-4.  Nếu một trong hai luồng bị mất kết nối tạm thời, hệ thống sẽ thực hiện cơ chế phục hồi và điền giá trị mặc định an toàn:
-    *   Nếu mất GPS: điền vĩ độ = 0.0, kinh độ = 0.0, độ cao = 0.0.
-    *   Nếu mất cảm biến: điền nhiệt độ = 0.0, độ ẩm = 0.0, CO2 = 0.0, alert = 0.
+---
 
-### Hạn chế và Hướng cải tiến:
-*   *Hạn chế*: Phương pháp ghép nối lỏng này giả định dữ liệu cảm biến và GPS có độ trễ thời gian bằng không. Trên thực tế, do chu kỳ đọc cảm biến (\(2.0\text{ s}\)) lệch pha với chu kỳ main loop (\(1.0\text{ s}\)), dữ liệu tích hợp có thể có sai lệch không gian nhỏ khi drone di chuyển ở tốc độ cao.
-*   *Cải tiến*: Sử dụng hàng đợi đệm dữ liệu (Queue Buffer) và áp dụng thuật toán nội suy tuyến tính (Linear Interpolation) dựa trên timestamp thực tế để khớp tọa độ chính xác, hoặc tích hợp trực tiếp bộ lọc Kalman mở rộng (EKF) để ước lượng trạng thái động học của thiết bị.
+## 5. Giải thuật chống nhiễu Hardware PWM Servo trên vi điều khiển BW16
+
+Một thách thức kỹ thuật lớn trên các vi điều khiển WiFi/IoT (như ESP32, ESP8266, RTL8720DN) là hiện tượng **Nhiễu xung nhịp WiFi (`WiFi Interrupt Jitter`)**. Khi sử dụng các thư viện Software PWM thông thường để điều khiển Servo, mỗi lần bộ phát WiFi 4G truyền bản tin MQTT lên Cloud, ngắt hệ thống sẽ làm lệch độ rộng xung (`Pulse Width`) khiến Servo bị co giật tự do (`Servo Jitter`), có thể gây tự động rơi chốt thả hàng giữa chừng.
+
+Để giải quyết triệt để vấn đề này trong đồ án, nhóm đã triển khai **Hardware PWM API (`pwmout_api`)** trực tiếp từ bộ đếm phần cứng của Realtek Ameba SDK:
+
+```cpp
+// Khởi tạo bộ đếm Hardware PWM chuyên biệt cho Servo tại chân PA13
+pwmout_t servo_pwm;
+pwmout_init(&servo_pwm, PA_13);
+pwmout_period_ms(&servo_pwm, 20); // Chu kỳ chuẩn Servo 50Hz (20ms)
+
+// Hàm tính toán & xuất độ rộng xung chính xác tuyệt đối không bị nhiễu WiFi
+void setServoAngle(int angle) {
+  angle = constrain(angle, 0, 180);
+  // Quy đổi góc xoay 0 - 180 độ sang độ rộng xung chuẩn 0.5ms - 2.5ms (500us - 2500us)
+  int pulse_us = map(angle, 0, 180, 500, 2500);
+  pwmout_pulsewidth_us(&servo_pwm, pulse_us);
+}
+```
+
+Nhờ giải thuật này, cơ cấu chốt thả hàng SG90 luôn giữ vững góc `0°` chắc như bàn thạch trong suốt hành trình bay, và chỉ mở chính xác góc `90°` khi nhận được lệnh điều khiển hợp lệ từ trạm GCS mặt đất.
 
 ---
 
-## 7. Tài liệu tham khảo (IEEE Citations)
+## 6. Kết luận & Hướng phát triển
 
-*   [1] Adafruit Industries, "DHT22 Temperature and Humidity Sensor Datasheet," Adafruit Learning System, Tech. Rep., 2017.
-*   [2] OASIS Standard, "MQTT Version 3.1.1 Plus Errata 01," OASIS Consortium, Tech. Rep., Dec. 2015. [Online]. Available: http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html
-*   [3] MAVLink Dev Team, "MAVLink Protocol Specification," MAVLink.io, 2020. [Online]. Available: https://mavlink.io/en/
-*   [4] D. L. Hall and J. Llinas, "An introduction to multisensor data fusion," *Proceedings of the IEEE*, vol. 85, no. 1, pp. 6-23, Jan. 1997. doi: 10.1109/5.554205.
+Hệ thống **Hộp Tải Trọng IoT trên UAV Quadcopter (`IRL_test`)** đã hoàn thiện thành công các mục tiêu kỹ thuật đặt ra:
+1. Xây dựng cấu trúc phần cứng nhỏ gọn, nhẹ nhàng, dễ dàng tháo lắp trên máy bay 5-inch mà không gây ảnh hưởng đến tính khí động học hay an toàn bay.
+2. Triển khai kiến trúc giao tiếp hai tầng độc lập, đảm bảo khả năng giám sát dữ liệu môi trường độ cao thời gian thực và điều khiển thả hàng cứu trợ/mẫu vật với độ tin cậy tuyệt đối.
+3. Giao diện Web Control Dashboard v3.3 tối ưu, thân thiện, dễ dàng mở trực tiếp trên mọi trình duyệt di động ngay tại thực địa.
+
+---
+## Tài liệu Tham khảo
+- [1] Realtek Ameba IoT Documentation: *RTL8720DN (BW16) Pinout & Hardware PWM API Specifications*.
+- [2] HiveMQ Cloud Public Broker Protocol Standards: *MQTT v3.1.1 & WebSockets over Port 8000*.

@@ -1,70 +1,54 @@
-# BÍ KÍP BẢO VỆ ĐỒ ÁN DRONE IOT (DEFENSE FAQ)
-
-Tài liệu này tổng hợp toàn bộ kiến trúc lõi của dự án và cách trả lời các câu hỏi phản biện từ Hội đồng Giám khảo. Hãy đọc kỹ để nắm vững "linh hồn" của hệ thống.
-
----
-
-## PHẦN 1: TỔNG QUAN KIẾN TRÚC HỆ THỐNG (DATA FLOW)
-
-**Hệ thống được chia làm 3 mảng độc lập nhưng giao tiếp thời gian thực với nhau:**
-
-1. **Mảng IoT Payload (Mạch BW16 - C++):**
-   - Đóng vai trò là "Thiết bị ngoại vi" thu thập môi trường.
-   - Nó đọc cảm biến (Nhiệt độ DHT11, Khí Gas MQ2), nhận diện nguy hiểm và hú còi.
-   - Dữ liệu được đẩy thẳng lên mạng Internet qua giao thức **MQTT** (Mosquitto/HiveMQ). Nhờ WiFi, nó không phụ thuộc vào bộ não điều khiển bay.
-
-2. **Mảng Điều khiển Bay (Mamba F405 hoặc SITL):**
-   - Đóng vai trò là "Bộ não Không gian" (Flight Controller). 
-   - Nó xuất ra tín hiệu vị trí GPS, la bàn (Attitude), tốc độ động cơ thông qua giao thức đặc thù của hàng không là **MAVLink**.
-
-3. **Mảng Trạm Mặt đất (Web GCS - JS/HTML & Gateway fusion.py):**
-   - Giao diện Web (HTML/JS) không thể tự động hiểu được ngôn ngữ MAVLink của máy bay.
-   - Do đó, script `fusion.py` đóng vai trò là "Phiên dịch viên" (Gateway). Nó cắm vào mạch Mamba (hoặc SITL), đọc MAVLink, giải mã thành định dạng JSON dễ hiểu, rồi lại đẩy lên mạng qua MQTT.
-   - Web GCS chỉ việc đăng ký (Subscribe) các topic MQTT để hứng toàn bộ dữ liệu từ cả BW16 và Mamba để vẽ biểu đồ và Bản đồ.
+# BÍ KÍP BẢO VỆ ĐỒ ÁN DRONE IOT (DEFENSE FAQ — BAY THẬT THỰC ĐỊA `IRL_test`)
+*Bộ câu hỏi phản biện từ Hội đồng Giám khảo & Lời giải chuẩn kỹ thuật chuyên sâu*
 
 ---
 
-## PHẦN 2: TOP CÂU HỎI PHẢN BIỆN (FAQ) VÀ CÁCH TRẢ LỜI
+## PHẦN 1: TỔNG QUAN KIẾN TRÚC HAI TẦNG ĐỘC LẬP (`DUAL-LAYER ARCHITECTURE`)
 
-### ❓ Câu 1: Tại sao em không cắm thẳng cảm biến vào mạch Mamba F405 mà phải dùng thêm mạch BW16 cho tốn kém?
-**Đáp:** "Dạ thưa thầy/cô, việc tách riêng Payload (BW16) và Flight Controller (Mamba) là **Kiến trúc Phân tán (Decentralized Architecture)** tiêu chuẩn trong thiết kế UAV hiện đại. 
-- Thứ nhất, mạch điều khiển bay (Mamba) cần tập trung 100% tài nguyên CPU để tính toán cân bằng PID (1000 lần/giây). Nếu bắt nó xử lý thêm cảm biến môi trường và kết nối mạng, nó có thể bị quá tải dẫn đến rơi máy bay.
-- Thứ hai, việc dùng BW16 giúp Payload có thể tự kết nối WiFi/4G độc lập. Nếu mạch bay bị hỏng hoặc mất kết nối vô tuyến (Radio), Payload vẫn tiếp tục gửi tọa độ và báo động khí gas về trạm mặt đất, tăng tính an toàn và dự phòng (Redundancy)."
+Khi bảo vệ đồ án thực địa (`IRL_test`), điểm sáng giá nhất của nhóm là đã tư duy và thiết kế hệ thống tách biệt thành **2 tầng vận hành độc lập hoàn toàn**:
 
-### ❓ Câu 2: Script `fusion.py` hoạt động thế nào? Nếu xử lý nhiều thứ cùng lúc thì có bị đơ không?
-**Đáp:** "Dạ thưa thầy/cô, `fusion.py` không hề bị đơ vì em đã áp dụng kỹ thuật **Đa luồng (Multi-threading)**. 
-- Em tách chương trình thành các Thread (luồng) chạy song song: Một luồng chuyên đọc MAVLink từ Mamba, một luồng chuyên nghe lệnh từ MQTT, và một luồng chuyên gửi dữ liệu lên Web. 
-- Việc áp dụng Threading (với thư viện `threading` trong Python) giúp các tác vụ I/O (chờ mạng, chờ cổng USB) không bị chặn (block) lẫn nhau, giúp dữ liệu hiển thị trên Web gần như không có độ trễ (Real-time)."
+1. **Tầng Động Lực & An Toàn Bay (`Flight Control Layer - 2.4GHz Radio`):**
+   - Phi công điều khiển máy bay cất/hạ cánh bằng tay cầm vô tuyến **Microzone MC6C** kết nối bộ thu `MC7REV2` qua giao thức **S.BUS 2.4GHz**.
+   - Độ trễ cực thấp (`< 10ms`), không phụ thuộc vào mạng Internet hay Cloud. Đảm bảo an toàn tuyệt đối khi bay ngoài trời.
 
-### ❓ Câu 3: Tại sao lại dùng MQTT để giao tiếp với Web thay vì dùng HTTP API (RESTful)?
-**Đáp:** "Dạ, vì đặc thù của Drone là **dữ liệu Streaming** (dữ liệu tuôn chảy liên tục). Tọa độ GPS và độ nghiêng thay đổi từng mili-giây.
-- Nếu dùng HTTP, Web GCS sẽ phải liên tục gửi request "Hỏi - Đáp" (Polling), gây nghẽn mạng và tốn pin máy bay.
-- Với MQTT, em dùng cơ chế Publish/Subscribe (Xuất bản/Đăng ký) và giao thức WebSockets. Web GCS chỉ cần mở 1 kết nối duy nhất, dữ liệu từ Drone sẽ tự động 'bắn' thẳng về trình duyệt một cách thụ động, giúp tiết kiệm băng thông tối đa và cực kỳ nhẹ."
-
-### ❓ Câu 4: Đồ án này có mô phỏng (SITL) và có mạch thật (Mamba). Tại sao em phải làm cả hai?
-**Đáp:** "Dạ, đây là mô hình **Digital Twin & Khảo nghiệm Lai (Hardware-in-the-loop / SITL)**.
-- Khi làm việc trong phòng Lab, Drone không bắt được sóng vệ tinh GPS, nên nếu dùng mạch thật thì bản đồ (Map) trên Web GCS không thể hoạt động.
-- Do đó, em dùng SITL để giả lập hệ thống GPS nhằm chứng minh tính năng vẽ Bản đồ định vị và Waypoint của hệ thống phần mềm. Sau đó, em dùng mạch Mamba và BW16 thật để chứng minh tốc độ phản hồi vật lý (độ trễ khi nghiêng mạch, còi hú thật). Đây là quá trình Test chuẩn mực từ phần mềm ra phần cứng trước khi thực sự đem máy bay ra bãi thử nghiệm."
-
-### ❓ Câu 5: Dữ liệu Khí Gas và Nhiệt độ hiển thị dạng Bản đồ nhiệt (Heatmap) hoạt động như thế nào?
-**Đáp:** "Dạ, trên Frontend (Web GCS), em sử dụng thư viện `Leaflet.js` kết hợp với plugin Heatmap.
-Khi hàm `updateMap(lat, lon)` nhận được Tọa độ mới từ Drone, em sẽ lấy giá trị Nhiệt độ (hoặc Gas) được cập nhật mới nhất từ mạch BW16. Thuật toán sẽ lưu điểm này vào một mảng lịch sử (History Array). Lớp Heatmap sẽ quét qua mảng này, tính toán cường độ (Intensity) dựa trên độ lớn của nhiệt độ và nội suy màu sắc (Nóng -> Đỏ, Lạnh -> Xanh) đè lên bản đồ Google Maps."
+2. **Tầng Giám Sát & Tải Trọng IoT (`Payload Layer - WiFi 4G Cloud MQTT`):**
+   - Hộp tải trọng nhúng vi điều khiển băng tần kép **Realtek Ameba BW16 (RTL8720DN)** gắn dưới bụng máy bay.
+   - Thu thập chỉ số môi trường (`DHT22, MQ-135, Sonar HC-SR04`) và điều khiển góc Servo SG90 thả chốt hàng.
+   - Kết nối tự động vào mạng WiFi 4G Hotspot, gửi/nhận lệnh trực tiếp từ **Public Cloud MQTT Broker (`broker.hivemq.com : 1800 / WebSockets 8000`)** về Web Dashboard tại mặt đất.
 
 ---
 
-## PHẦN 3: GIẢI PHẪU CÁC FILE CODE CHÍNH (CẦN NHỚ)
+## PHẦN 2: TOP CÂU HỎI PHẢN BIỆN (FAQ) TỪ HỘI ĐỒNG VÀ ĐÁP ÁN CHUẨN
 
-1. **`fusion.py` (Bộ não trung gian)**
-   - Hàm `mavlink_loop()`: Vòng lặp vô tận dùng thư viện `pymavlink` để hứng gói tin từ cổng USB. Bóc tách `ATTITUDE` (độ nghiêng) và `GLOBAL_POSITION_INT` (GPS).
-   - Hàm `mqtt_loop()`: Vòng lặp giữ kết nối với Paho MQTT, gửi các gói tin JSON chứa tọa độ lên mạng.
+### ❓ Câu 1: Tại sao nhóm không cắm thẳng cảm biến vào mạch Flight Controller của máy bay mà phải tách riêng ra hộp mạch Realtek BW16?
+**Đáp:** "Dạ thưa thầy/cô, việc tách riêng Tầng Lái Máy Bay (`Flight Controller`) và Tầng Giám Sát Tải Trọng (`IoT Payload BW16`) là **Kiến trúc Phân tán (`Decentralized Architecture`)** tiêu chuẩn trong thiết kế UAV thực chiến hiện đại:
+- **Thứ nhất (An toàn bay tối thượng):** Mạch Flight Controller cần tập trung 100% tài nguyên CPU để tính toán vòng lặp PID giữ thăng bằng cho 4 động cơ (`1000 - 8000 lần/giây`). Nếu bắt mạch bay gánh thêm việc đọc cảm biến Gas analog, quản lý kết nối WiFi 4G và xử lý giao thức MQTT, ngắt mạng (`Network Interrupt`) hoặc treo chip IoT sẽ làm máy bay mất kiểm soát và rơi ngay lập tức.
+- **Thứ hai (Dự phòng thảm họa — Redundancy):** Nhờ hộp BW16 có kết nối WiFi 4G và nguồn cấp độc lập, nếu máy bay gặp sự cố hạ cánh khẩn cấp hoặc mất sóng vô tuyến RC, hộp tải trọng vẫn tiếp tục gửi chỉ số môi trường và còi báo động (`Buzzer`) về trạm mặt đất, giúp cứu hộ và thu hồi thiết bị an toàn."
 
-2. **`index.html` (Giao diện Web)**
-   - Hàm `onMessageArrived(message)`: Trái tim của Web GCS. Nó hứng mọi gói tin JSON từ MQTT, dùng lệnh `if (topic === ...)` để phân loại xem đây là dữ liệu GPS, Nhiệt độ hay Động cơ, rồi đẩy vào các biểu đồ Chart.js tương ứng.
-   - Hàm `toggleHeatmap()`: Chức năng vẽ vệt nhiệt độ đè lên bản đồ Leaflet.
+### ❓ Câu 2: Tại sao hệ thống lại sử dụng giao thức MQTT kết hợp WebSockets thay vì dùng HTTP RESTful API thông thường?
+**Đáp:** "Dạ thưa thầy/cô, vì đặc thù của hệ thống giám sát trên máy bay là **Dữ liệu tuôn chảy liên tục (`Real-time Telemetry Streaming`)**:
+- Nếu sử dụng HTTP RESTful, mỗi lần muốn cập nhật thông số, Web Dashboard sẽ phải liên tục gửi các request 'Hỏi - Đáp' (`Polling`) lên máy chủ. Việc này tạo ra hàng nghìn kết nối TCP mở/đóng liên tục, gây nghẽn băng thông 4G và làm tiêu hao pin của mạch nhúng rất nhanh.
+- Với **MQTT qua WebSockets (Port 8000)**, hệ thống áp dụng cơ chế `Publish/Subscribe` (Xuất bản/Đăng ký). Web Dashboard và mạch BW16 chỉ cần mở **đúng 1 đường hầm kết nối duy nhất (`Single Persistent Connection`)**. Khi cảm biến trên máy bay có số liệu mới, Public Cloud Broker sẽ chủ động 'đẩy' (`Push`) dữ liệu về trình duyệt ngay lập tức với độ trễ chỉ vài chục mili-giây, cực kỳ nhẹ và tiết kiệm tài nguyên."
 
-3. **`bw16_sensor.ino` (Code Nhúng C++)**
-   - Hàm `readSensors()`: Đọc chân Analog và Digital để lấy thông số môi trường.
-   - Đã áp dụng cơ chế **Debounce** (chống nhiễu tín hiệu) hoặc giới hạn tần suất gửi bằng hàm `millis()` thay vì dùng `delay()`, giúp mạch không bị "đơ" chặn các quá trình khác.
+### ❓ Câu 3: Mạch BW16 vừa phải duy trì kết nối WiFi 4G vừa phải điều khiển Servo thả chốt. Làm sao để Servo không bị co giật (`Servo Jitter`) do sóng WiFi gây nhiễu?
+**Đáp:** "Dạ, đây chính là điểm cải tiến kỹ thuật nổi bật trong phần firmware C++ (`bw16_sensor.ino`) của nhóm em.
+- Trên các vi điều khiển IoT thông thường (như ESP8266 hay Arduino), nếu dùng thư viện `Servo.h` (dựa trên Software PWM), mỗi lần bộ phát WiFi truyền bản tin MQTT, ngắt hệ thống (`Interrupt`) sẽ làm sai lệch độ rộng xung khiến Servo bị co giật loạn xạ, có thể tự động rơi chốt thả hàng giữa trời.
+- Để khắc phục triệt để, nhóm em đã lập trình sử dụng **Hardware PWM API (`pwmout_api`)** trực tiếp từ bộ đếm phần cứng của Realtek Ameba SDK (`chân PA13 / PA_13`). Bộ đếm phần cứng tự động tạo xung chuẩn `50Hz (20ms)` độc lập hoàn toàn với lõi xử lý WiFi, giúp chốt Servo thả hàng giữ vững góc `0°` tuyệt đối và chỉ xoay `90°` khi nhận đúng lệnh từ trạm mặt đất!"
+
+### ❓ Câu 4: Làm thế nào để đảm bảo khi phi công cất cánh ngoài trời, mạch BW16 nhận đủ nguồn điện ổn định mà không làm cháy nổ vi điều khiển?
+**Đáp:** "Dạ thưa thầy/cô, nhóm em tuân thủ nghiêm ngặt **Quy tắc cách ly và chuyển đổi điện áp (`True Voltage Regulation & Isolation`)**:
+- Pin bay của máy bay là pin LiPo 4S có điện áp cao (`16.8V`). Trong khi đó mạch Realtek BW16 chỉ chịu điện áp tối đa `5V` tại chân `VIN` và hoạt động logic ở `3.3V`.
+- Nhóm em không bao giờ lấy nguồn trực tiếp từ pin LiPo vào mạch mà sử dụng mạch ổn áp nội bộ **UBEC 5V/3A** từ Flight Controller (hoặc mạch hạ áp mini gắn giắc cân bằng pin LiPo). Mạch UBEC hạ điện áp từ 16.8V xuống đúng 5V chuẩn, cung cấp dòng điện dồi dào (`3A`) nuôi đủ cả mạch BW16, cảm biến khí Gas MQ-135 (cần dòng nung lớn) và động cơ Servo SG90 mà không gây sụt áp hay nóng mạch chính."
+
+### ❓ Câu 5: Cảm biến siêu âm (`HC-SR04`) trên bụng máy bay đóng vai trò gì trong quy trình thả hàng thực địa?
+**Đáp:** "Dạ, cảm biến siêu âm `HC-SR04` hướng thẳng xuống mặt đất đóng vai trò là **Thước đo độ cao cận cảnh (`Precision Altitude Altimeter`)** cho cơ cấu thả chốt:
+- Khi máy bay bay trên cao (`> 3 mét`), phi công điều khiển hạ dần độ cao xuống khu vực mục tiêu.
+- Khi máy bay tiến vào phạm vi `< 250 cm`, cảm biến siêu âm liên tục phát xung `10us` và gửi khoảng cách thực tế (`Sonar Dist`) về Web Dashboard. Kỹ sư quan sát thông số này, khi thấy máy bay cách mặt đất `< 100 cm` — mức độ cao an toàn tối ưu để thả gói hàng cứu trợ mà không bị vỡ — kỹ sư mới nhấn nút `Open 90°` để mở chốt thả hàng."
 
 ---
-*(Chúc bạn bảo vệ đồ án thành công! Hãy đọc kỹ tài liệu này, bạn đã nắm 90% cơ hội đạt điểm A+)*
+
+## PHẦN 3: ĐIỂM NHẤN TRONG MÃ NGUỒN C++ (`bw16_sensor.ino`)
+Khi thầy cô hỏi về code, hãy chỉ ra 3 điểm lập trình chuyên nghiệp sau:
+1. **Quản lý thời gian không chặn (`Non-blocking millis() loop`):** Toàn bộ chu kỳ đọc cảm biến và gửi MQTT được điều phối bằng hàm `millis()`, tuyệt đối không dùng `delay()` để mạch luôn phản hồi tức thì với lệnh mở Servo từ Web.
+2. **Lọc dữ liệu cảm biến (`Data Validation & Filtering`):** Kiểm tra giá trị `isnan()` từ DHT22 và giới hạn khoảng cách Sonar (`constrain`) trước khi đóng gói JSON, tránh gửi dữ liệu rác lên Cloud.
+3. **Cơ chế Watchdog / Failsafe:** Nếu mất kết nối WiFi 4G, đèn LED trạng thái chuyển sang nháy chậm và còi Buzzer phát tín hiệu cảnh báo để kỹ sư mặt đất biết tình trạng mạch.
