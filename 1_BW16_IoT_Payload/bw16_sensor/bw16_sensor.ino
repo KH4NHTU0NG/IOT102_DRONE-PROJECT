@@ -24,10 +24,10 @@ const char* topic_pub   = "iot102_drone/payload/sensors";
 const char* topic_sub   = "iot102_drone/control/payload";
 
 // --- Pin Definitions ---
-#define DHT_PIN         PA30
-#define MQ135_PIN       PB3
-#define BUZZER_PIN      PA14
-#define LED_RED_PIN     PA15
+#define DHT_PIN         PA26
+#define MQ135_PIN       PB1
+#define BUZZER_PIN      PA15
+#define LED_RED_PIN     PA30
 #define LED_GREEN_PIN   PA27
 #define SERVO_PIN_HW    PA_13
 
@@ -38,10 +38,11 @@ Adafruit_SSD1306 display(128, 64, &Wire, -1);
 // --- Ngưỡng Cảnh báo & Chu kỳ ---
 #define CO2_THRESHOLD    600
 #define TEMP_THRESHOLD   40.0
+#define INTERVAL_DHT     2000
 #define INTERVAL_READ    200
 #define INTERVAL_PUB     1000
 #define RSSI_INTERVAL    5000
-#define MQ135_WARMUP_MS  120000
+#define MQ135_WARMUP_MS  10000  // Giảm xuống 10s để test ngay
 
 // --- Biến toàn cục ---
 WiFiClient   wifiClient;
@@ -49,7 +50,7 @@ PubSubClient client(wifiClient);
 DHT          dht(DHT_PIN, DHT22);
 pwmout_t     servo_pwm;
 
-unsigned long lastRead = 0, lastPub = 0, lastRssi = 0;
+unsigned long lastRead = 0, lastPub = 0, lastRssi = 0, lastDht = 0;
 float temp_val = 0.0, hum_val = 0.0;
 int   mq_val = 0, rssi_val = 0, servo_angle = 0;
 bool  env_alert = false, dht_ok = false;
@@ -249,22 +250,31 @@ void loop() {
         if (WiFi.status() == WL_CONNECTED) rssi_val = WiFi.RSSI();
     }
 
-    // Đọc cảm biến mỗi 200ms
+    // Đọc cảm biến mỗi 200ms (Riêng DHT22 đọc mỗi 2s để tránh bị NaN)
     if (now - lastRead >= INTERVAL_READ) {
         lastRead = now;
-        float t = dht.readTemperature();
-        float h = dht.readHumidity();
-        if (!isnan(t) && !isnan(h)) { temp_val = t; hum_val = h; dht_ok = true; }
-        else { dht_ok = false; }
+        
+        if (now - lastDht >= INTERVAL_DHT) {
+            lastDht = now;
+            float t = dht.readTemperature();
+            float h = dht.readHumidity();
+            if (!isnan(t) && !isnan(h)) { temp_val = t; hum_val = h; dht_ok = true; }
+            else { dht_ok = false; }
+        }
 
         mq_val = analogRead(MQ135_PIN);
         env_alert = (temp_val >= TEMP_THRESHOLD);
         if (now > MQ135_WARMUP_MS) env_alert = env_alert || (mq_val > CO2_THRESHOLD);
 
-        // Buzzer & LED logic
-        digitalWrite(BUZZER_PIN,    (ovr_buzzer ? state_buzzer : env_alert) ? LOW : HIGH);
-        digitalWrite(LED_RED_PIN,   (ovr_led ? state_led : env_alert) ? HIGH : LOW);
-        digitalWrite(LED_GREEN_PIN, (ovr_led ? !state_led : !env_alert) ? HIGH : LOW);
+        // Buzzer & LED logic (Nhấp nháy & Beep khi có cảnh báo)
+        bool blink_state = (now / 500) % 2 == 0; // Đảo trạng thái mỗi 500ms
+        
+        bool is_alerting = (ovr_led ? state_led : env_alert);
+        bool is_buzzing = (ovr_buzzer ? state_buzzer : env_alert);
+        
+        digitalWrite(BUZZER_PIN,    is_buzzing ? (blink_state ? LOW : HIGH) : HIGH); // Active LOW
+        digitalWrite(LED_RED_PIN,   is_alerting ? (blink_state ? HIGH : LOW) : LOW); // Active HIGH
+        digitalWrite(LED_GREEN_PIN, is_alerting ? LOW : HIGH); // Tắt xanh khi có cảnh báo
 
         updateOLED();
     }
