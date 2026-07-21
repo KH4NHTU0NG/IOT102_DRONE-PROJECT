@@ -1,4 +1,4 @@
-# DANH MỤC MÃ NGUỒN CHÍNH THỨC — ĐỒ ÁN TỐT NGHIỆP DRONE IOT
+# DANH MỤC MÃ NGUỒN CHÍNH THỨC — ĐỒ ÁN CUỐI KÌ DRONE IOT102
 
 Bộ thư mục này chứa **đúng các tệp mã nguồn cốt lõi (Core Source Code)** của hệ thống, đã được loại bỏ toàn bộ file log, file cấu hình trung gian, script chạy thử và dữ liệu rác để nộp Hội đồng đánh giá.
 
